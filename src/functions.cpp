@@ -89,7 +89,7 @@ int gridValue(nav_msgs::OccupancyGrid &mapData, std::vector<float> Xp) {
     float originY = mapData.info.origin.position.y;
 
     float width = mapData.info.width;
-    std::vector<signed int> Data = mapData.data;
+    std::vector<signed char> Data = mapData.data;
 
     // returns grid value at "Xp" location
     // map data: 100 occupied, -1 unknown, 0 free
@@ -121,7 +121,7 @@ int ObstacleFree(std::vector<float> x_near, std::vector<float> &x_new, nav_msgs:
         }
     }
 
-    char out = 0;
+    int out = 0;
     x_new = x_i;
 
     if (unk == 1) {

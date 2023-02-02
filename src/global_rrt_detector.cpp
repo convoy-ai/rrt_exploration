@@ -44,6 +44,8 @@ void rvizCallBack(const geometry_msgs::PointStamped::ConstPtr& msg) {
     p.z= msg->point.z;
 
     points.points.push_back(p);
+
+    ROS_INFO("Number of clicked points received: %ld", points.points.size());
 }
 
 
@@ -66,12 +68,14 @@ int main(int argc, char **argv) {
     // fetching all parameters
     float eta, init_map_x, init_map_y, range;
     std::string map_topic, base_frame_topic;
+    int is_map_static;
 
     std::string ns;
     ns = ros::this_node::getName();
 
-    ros::param::param<float>(ns + "/eta", eta, 0.5);
-    ros::param::param<std::string>(ns+"/map", map_topic, "/robot_1/map");
+    nh.param<float>(ns + "/eta", eta, 0.5);
+    nh.param<std::string>(ns + "/map_topic", map_topic, "/robot_1/map");
+    nh.param<int>(ns + "/is_map_static", is_map_static, 0);
 
     //---------------------------------------------------------------
     ros::Subscriber map_sub = nh.subscribe(map_topic, 100, mapCallBack);
@@ -84,11 +88,10 @@ int main(int argc, char **argv) {
  
  
     // wait until map is received, when a map is received, mapData.header.seq will not be < 1
-    while (mapData.header.seq < 1 or mapData.data.size() < 1)  {
+    while (mapData.data.size() < 1 || (!is_map_static && mapData.header.seq < 1))  {
         ros::spinOnce();
         ros::Duration(0.1).sleep();
     }
-
 
 
     // visualizations: points and lines
@@ -129,11 +132,14 @@ int main(int argc, char **argv) {
 
     geometry_msgs::Point p;
 
+    ROS_INFO("Waiting for clicked points");
 
     while (points.points.size() < 5) {
         ros::spinOnce();
-        rviz_pub.publish(points) ;
+        rviz_pub.publish(points);
     }
+
+    ROS_INFO("Begin building RRT");
 
     std::vector<float> temp1;
     temp1.push_back(points.points[0].x);
@@ -171,6 +177,8 @@ int main(int argc, char **argv) {
     x_origin.push_back(trans.x);
     x_origin.push_back(trans.y);
 
+    ROS_INFO("Origin: (%.2f, %.2f)", x_origin[0], x_origin[1]);
+
     V.push_back(x_origin);
 
     points.points.clear();
@@ -204,6 +212,7 @@ int main(int argc, char **argv) {
 
         if (checking == -1) {
             // x_new is in unknown region, near the frontier boundary
+            // publish it as an exploration goal (detected point)
             exploration_goal.header.stamp = ros::Time(0);
             exploration_goal.header.frame_id = mapData.header.frame_id;
 
@@ -221,6 +230,8 @@ int main(int argc, char **argv) {
 
             points.points.clear();
         } else if (checking == 1) {
+            // x_new is in free space
+            // add it to V as RRT expansion
             V.push_back(x_new);
 
             p.x = x_new[0];
