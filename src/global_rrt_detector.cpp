@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
         rviz_pub.publish(points);
     }
 
-    ROS_INFO("Begin building RRT");
+    ROS_INFO("Global detector: begin building RRT");
 
     std::vector<float> temp1;
     temp1.push_back(points.points[0].x);

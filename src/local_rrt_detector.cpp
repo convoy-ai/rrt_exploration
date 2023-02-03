@@ -136,6 +136,8 @@ int main(int argc, char **argv) {
         rviz_pub.publish(points) ;
     }
 
+    ROS_INFO("Local detector: begin building RRT");
+
     std::vector<float> temp1;
     temp1.push_back(points.points[0].x);
     temp1.push_back(points.points[0].y);
@@ -241,6 +243,7 @@ int main(int argc, char **argv) {
             x_new[1] = transform.getOrigin().y();
             V.push_back(x_new);
             line.points.clear();
+            ROS_INFO("Reset local RRT");
         } else if (checking == 1) {
             V.push_back(x_new);
 
