@@ -108,7 +108,7 @@ def point_of_index(mapData, i):
 
 
 def informationGain(mapData, point, r):
-    infoGain = 0
+    info_gain_level = 0
     index = index_of_point(mapData, point)
     r_region = int(r/mapData.info.resolution)
     init_index = index-r_region*(mapData.info.width+1)
@@ -119,8 +119,8 @@ def informationGain(mapData, point, r):
         for i in range(start, end+1):
             if (i >= 0 and i < limit and i < len(mapData.data)):
                 if(mapData.data[i] == -1 and norm(array(point)-point_of_index(mapData, i)) <= r):
-                    infoGain += 1
-    return infoGain*(mapData.info.resolution**2)
+                    info_gain_level += 1
+    return info_gain_level * (mapData.info.resolution**2)
 # ________________________________________________________________________________
 
 
@@ -207,7 +207,14 @@ def gridValue(mapData, Xp):
     index = (floor((Xp[1]-Xstarty)/resolution)*width) + \
         (floor((Xp[0]-Xstartx)/resolution))
 
-    if int(index) < len(Data):
-        return Data[int(index)]
-    else:
-        return 100
+    corrected_index = (int(index) + len(Data)) % len(Data)
+
+    return Data[corrected_index]
+
+    # index = (floor((Xp[1]-Xstarty)/resolution)*width) + \
+    #     (floor((Xp[0]-Xstartx)/resolution))
+
+    # if int(index) < len(Data):
+    #     return Data[int(index)]
+    # else:
+    #     return 100

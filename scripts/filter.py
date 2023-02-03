@@ -15,40 +15,41 @@ from rrt_exploration.msg import PointArray
 
 # Subscribers' callbacks------------------------------
 mapData = OccupancyGrid()
-frontiers = []
+detected_points = []
 globalmaps = []
 
 
-def callBack(data, args):
-    global frontiers, min_distance
+def detected_points_callback(data, args):
+    global detected_points
     transformedPoint = args[0].transformPoint(args[1], data)
     x = [array([transformedPoint.point.x, transformedPoint.point.y])]
-    if len(frontiers) > 0:
-        frontiers = vstack((frontiers, x))
+    if len(detected_points) > 0:
+        detected_points = vstack((detected_points, x))
     else:
-        frontiers = x
+        detected_points = x
 
 
-def mapCallBack(data):
+def map_callback(data):
     global mapData
     mapData = data
 
 
-def globalMap(data):
-    global global1, globalmaps, litraIndx, namespace_init_count, n_robots
-    global1 = data
+def global_costmap_callback(data):
+    global globalmaps, litraIndx, namespace_init_count, n_robots
+    
     if n_robots > 1:
         indx = int(data._connection_header['topic']
                    [litraIndx])-namespace_init_count
     elif n_robots == 1:
         indx = 0
+
     globalmaps[indx] = data
 
 # Node----------------------------------------------
 
 
 def node():
-    global frontiers, mapData, global1, global2, global3, globalmaps, litraIndx, n_robots, namespace_init_count
+    global detected_points, mapData, globalmaps, litraIndx, n_robots, namespace_init_count
     rospy.init_node('filter', anonymous=False)
 
     # fetching all parameters
@@ -60,7 +61,7 @@ def node():
     n_robots = rospy.get_param('~n_robots', 1)
     namespace = rospy.get_param('~namespace', '')
     namespace_init_count = rospy.get_param('namespace_init_count', 1)
-    rateHz = rospy.get_param('~rate', 100)
+    rateHz = rospy.get_param('~rate', 10)
     global_costmap_topic = rospy.get_param(
         '~global_costmap_topic', '/move_base_node/global_costmap/costmap')
     robot_frame = rospy.get_param('~robot_frame', 'base_link')
@@ -68,7 +69,7 @@ def node():
     litraIndx = len(namespace)
     rate = rospy.Rate(rateHz)
 # -------------------------------------------
-    rospy.Subscriber(map_topic, OccupancyGrid, mapCallBack)
+    rospy.Subscriber(map_topic, OccupancyGrid, map_callback)
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -79,47 +80,52 @@ def node():
     if len(namespace) > 0:
         for i in range(0, n_robots):
             rospy.Subscriber(namespace+str(i+namespace_init_count) +
-                             global_costmap_topic, OccupancyGrid, globalMap)
+                             global_costmap_topic, OccupancyGrid, global_costmap_callback)
     elif len(namespace) == 0:
-        rospy.Subscriber(global_costmap_topic, OccupancyGrid, globalMap)
+        rospy.Subscriber(global_costmap_topic, OccupancyGrid, global_costmap_callback)
+
 # wait if map is not received yet
     while (len(mapData.data) < 1):
-        rospy.loginfo('Waiting for the map')
+        rospy.logdebug('Waiting for the map')
         rospy.sleep(0.1)
         pass
+
 # wait if any of robots' global costmap map is not received yet
     for i in range(0, n_robots):
         while (len(globalmaps[i].data) < 1):
-            rospy.loginfo('Waiting for the global costmap')
+            rospy.logdebug('Waiting for the global costmap')
             rospy.sleep(0.1)
             pass
 
-    global_frame = "/"+mapData.header.frame_id
+    global_frame = "/" + mapData.header.frame_id
 
-    tfLisn = tf.TransformListener()
+    tf_listener = tf.TransformListener()
     if len(namespace) > 0:
         for i in range(0, n_robots):
-            tfLisn.waitForTransform(global_frame[1:], namespace+str(
+            tf_listener.waitForTransform(global_frame[1:], namespace+str(
                 i+namespace_init_count)+'/'+robot_frame, rospy.Time(0), rospy.Duration(10.0))
     elif len(namespace) == 0:
-        tfLisn.waitForTransform(
+        tf_listener.waitForTransform(
             global_frame[1:], '/'+robot_frame, rospy.Time(0), rospy.Duration(10.0))
 
-    rospy.Subscriber(goals_topic, PointStamped, callback=callBack,
-                     callback_args=[tfLisn, global_frame[1:]])
-    pub = rospy.Publisher('frontiers', Marker, queue_size=10)
-    pub2 = rospy.Publisher('centroids', Marker, queue_size=10)
-    filterpub = rospy.Publisher('filtered_points', PointArray, queue_size=10)
+    rospy.Subscriber(goals_topic, PointStamped, callback=detected_points_callback,
+                     callback_args=[tf_listener, global_frame[1:]])
 
-    rospy.loginfo("the map and global costmaps are received")
+    frontiers_pub = rospy.Publisher('frontiers', Marker, queue_size=10)
+    filtered_points_pub = rospy.Publisher('filtered_points', PointArray, queue_size=10)
 
-    # wait if no frontier is received yet
-    while len(frontiers) < 1:
+    rospy.loginfo("The map and global costmaps have been received")
+
+    # wait if no detected_points have been received
+    while len(detected_points) < 1:
+        rospy.sleep(0.1)
         pass
 
-    points = Marker()
-    points_clust = Marker()
+    rospy.loginfo(f"Received detected points: {len(detected_points)}")
+    
+
 # Set the frame ID and timestamp.  See the TF tutorials for information on these.
+    points = Marker()
     points.header.frame_id = mapData.header.frame_id
     points.header.stamp = rospy.Time.now()
 
@@ -135,109 +141,97 @@ def node():
 
     points.scale.x = 0.2
     points.scale.y = 0.2
-
+    
+    # purple points
     points.color.r = 255.0/255.0
     points.color.g = 255.0/255.0
     points.color.b = 0.0/255.0
-
     points.color.a = 1
+
     points.lifetime = rospy.Duration()
 
+    # an instance of Point to be appended into points array
     p = Point()
-
     p.z = 0
 
-    pp = []
-    pl = []
-
-    points_clust.header.frame_id = mapData.header.frame_id
-    points_clust.header.stamp = rospy.Time.now()
-
-    points_clust.ns = "markers3"
-    points_clust.id = 4
-
-    points_clust.type = Marker.POINTS
-
-# Set the marker action for centroids.  Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
-    points_clust.action = Marker.ADD
-
-    points_clust.pose.orientation.w = 1.0
-
-    points_clust.scale.x = 0.2
-    points_clust.scale.y = 0.2
-    points_clust.color.r = 0.0/255.0
-    points_clust.color.g = 255.0/255.0
-    points_clust.color.b = 0.0/255.0
-
-    points_clust.color.a = 1
-    points_clust.lifetime = rospy.Duration()
-
+    # temporary point for use in tf transform lookup
     temppoint = PointStamped()
     temppoint.header.frame_id = mapData.header.frame_id
     temppoint.header.stamp = rospy.Time(0)
     temppoint.point.z = 0.0
 
-    arraypoints = PointArray()
-    tempPoint = Point()
-    tempPoint.z = 0.0
+    # filtered points array
+    filtered_points = PointArray()
+    filtered_point = Point()
+    filtered_point.z = 0.0
+
+
 # -------------------------------------------------------------------------
 # ---------------------     Main   Loop     -------------------------------
 # -------------------------------------------------------------------------
+
+    rospy.loginfo("Start filtering")
+
     while not rospy.is_shutdown():
         # -------------------------------------------------------------------------
-        # Clustering frontier points
+        # Clustering detected points
         centroids = []
-        front = copy(frontiers)
-        if len(front) > 1:
+
+        # if there is only one detected point no need for clustering, i.e. centroids = detected_points
+        if len(detected_points) == 1:
+            centroids = detected_points
+
+        elif len(detected_points) > 1:
             ms = MeanShift(bandwidth=0.3)
-            ms.fit(front)
+            ms.fit(detected_points)
             centroids = ms.cluster_centers_  # centroids array is the centers of each cluster
 
-        # if there is only one frontier no need for clustering, i.e. centroids=frontiers
-        if len(front) == 1:
-            centroids = front
-        frontiers = copy(centroids)
+        else:
+            rospy.logerr(f"Invalid number of frontiers: {len(detected_points)}")
+        
+
 # -------------------------------------------------------------------------
-# clearing old frontiers
+# filtering centroids
 
         z = 0
         while z < len(centroids):
-            cond = False
+            in_obstacle = False
             temppoint.point.x = centroids[z][0]
             temppoint.point.y = centroids[z][1]
 
+            # check if centroids lies in obstacle region of any of the robot's map
             for i in range(0, n_robots):
-
-                transformedPoint = tfLisn.transformPoint(
+                if in_obstacle: 
+                    break
+                transformedPoint = tf_listener.transformPoint(
                     globalmaps[i].header.frame_id, temppoint)
-                x = array([transformedPoint.point.x, transformedPoint.point.y])
-                cond = (gridValue(globalmaps[i], x) > threshold) or cond
-            if (cond or (informationGain(mapData, [centroids[z][0], centroids[z][1]], info_radius*0.5)) < 0.2):
+                c = array([transformedPoint.point.x, transformedPoint.point.y])
+                in_obstacle = gridValue(globalmaps[i], c) > threshold
+
+            if in_obstacle or informationGain(mapData, [centroids[z][0], centroids[z][1]], info_radius * 0.5) < 0.2:
+                # information gain is too low
                 centroids = delete(centroids, (z), axis=0)
-                z = z-1
-            z += 1
+                z = z - 1
+            z = z + 1
+
+
 # -------------------------------------------------------------------------
 # publishing
-        arraypoints.points = []
-        for i in centroids:
-            tempPoint.x = i[0]
-            tempPoint.y = i[1]
-            arraypoints.points.append(copy(tempPoint))
-        filterpub.publish(arraypoints)
-        pp = []
-        for q in range(0, len(frontiers)):
-            p.x = frontiers[q][0]
-            p.y = frontiers[q][1]
-            pp.append(copy(p))
-        points.points = pp
-        pp = []
-        for q in range(0, len(centroids)):
-            p.x = centroids[q][0]
-            p.y = centroids[q][1]
-            pp.append(copy(p))
-        points_clust.points = pp
-        pub.publish(points)
-        pub2.publish(points_clust)
+        filtered_points.points = []
+        points.points = []
+
+        for c in centroids:
+            filtered_point.x = c[0]
+            filtered_point.y = c[1]
+            filtered_points.points.append(copy(filtered_point))
+
+            p.x = c[0]
+            p.y = c[1]
+            points.points.append(copy(p))
+
+        filtered_points_pub.publish(filtered_points)
+        frontiers_pub.publish(points)
+
         rate.sleep()
 # -------------------------------------------------------------------------
 
