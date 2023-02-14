@@ -89,20 +89,32 @@ class robot:
 
 def index_of_point(mapData, Xp):
     resolution = mapData.info.resolution
-    Xstartx = mapData.info.origin.position.x
-    Xstarty = mapData.info.origin.position.y
+    origin_x = mapData.info.origin.position.x
+    origin_y = mapData.info.origin.position.y
     width = mapData.info.width
     Data = mapData.data
-    index = int(	(floor((Xp[1]-Xstarty)/resolution) *
-                  width)+(floor((Xp[0]-Xstartx)/resolution)))
-    return index
+
+    x = Xp[0]
+    y = Xp[1]
+
+    num_rows = round((x - origin_x) / resolution) * width
+    num_columns = round((y - origin_y) / resolution)
+    index = int(num_rows + num_columns)
+    corrected_index = (index + len(Data)) % len(Data)
+
+    return corrected_index
 
 
 def point_of_index(mapData, i):
-    y = mapData.info.origin.position.y + \
-        (i/mapData.info.width)*mapData.info.resolution
-    x = mapData.info.origin.position.x + \
-        (i-(i/mapData.info.width)*(mapData.info.width))*mapData.info.resolution
+    resolution = mapData.info.resolution
+
+    origin_x = mapData.info.origin.position.x
+    origin_y = mapData.info.origin.position.y
+    width = mapData.info.width
+
+    x = origin_x + floor(i / width) * resolution
+    y = origin_y + (i % width) * resolution
+
     return array([x, y])
 # ________________________________________________________________________________
 
@@ -110,16 +122,22 @@ def point_of_index(mapData, i):
 def informationGain(mapData, point, r):
     info_gain_level = 0
     index = index_of_point(mapData, point)
-    r_region = int(r/mapData.info.resolution)
+    r_region = round(r/mapData.info.resolution)
     init_index = index-r_region*(mapData.info.width+1)
+    print(f"index: {index}; init_index: {init_index}; r_region: {r_region}")
+    # print(f"map info: {mapData.info}")
     for n in range(0, 2*r_region+1):
         start = n*mapData.info.width+init_index
         end = start+2*r_region
-        limit = ((start/mapData.info.width)+2)*mapData.info.width
+        limit = start + 2*mapData.info.width
+        # print(f"start: {start}; end: {end}; limit: {limit}")
         for i in range(start, end+1):
             if (i >= 0 and i < limit and i < len(mapData.data)):
+                # if mapData.data[i] != 0:
+                    # print(f"i: {i}; data: {mapData.data[i]}; i_point: {point_of_index(mapData, i)}; norm: {norm(array(point)-point_of_index(mapData, i))}")
                 if(mapData.data[i] == -1 and norm(array(point)-point_of_index(mapData, i)) <= r):
                     info_gain_level += 1
+    print(f"info_gain_level: {info_gain_level}")
     return info_gain_level * (mapData.info.resolution**2)
 # ________________________________________________________________________________
 
@@ -196,25 +214,9 @@ def Nearest2(V, x):
 
 
 def gridValue(mapData, Xp):
-    resolution = mapData.info.resolution
-    Xstartx = mapData.info.origin.position.x
-    Xstarty = mapData.info.origin.position.y
-
-    width = mapData.info.width
-    Data = mapData.data
     # returns grid value at "Xp" location
     # map data:  100 occupied      -1 unknown       0 free
-    index = (floor((Xp[1]-Xstarty)/resolution)*width) + \
-        (floor((Xp[0]-Xstartx)/resolution))
 
-    corrected_index = (int(index) + len(Data)) % len(Data)
+    index = index_of_point(mapData, Xp)
 
-    return Data[corrected_index]
-
-    # index = (floor((Xp[1]-Xstarty)/resolution)*width) + \
-    #     (floor((Xp[0]-Xstartx)/resolution))
-
-    # if int(index) < len(Data):
-    #     return Data[int(index)]
-    # else:
-    #     return 100
+    return mapData.data[index]

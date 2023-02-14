@@ -68,14 +68,14 @@ int main(int argc, char **argv) {
     // fetching all parameters
     float eta, init_map_x, init_map_y, range;
     std::string map_topic, base_frame_topic;
-    int is_map_static;
+    int update_rate;
 
     std::string ns;
     ns = ros::this_node::getName();
 
     nh.param<float>(ns + "/eta", eta, 0.5);
     nh.param<std::string>(ns + "/map_topic", map_topic, "/robot_1/map");
-    nh.param<int>(ns + "/is_map_static", is_map_static, 0);
+    nh.param<int>(ns + "/rate", update_rate, 100);
 
     //---------------------------------------------------------------
     ros::Subscriber map_sub = nh.subscribe(map_topic, 100, mapCallBack);
@@ -84,11 +84,11 @@ int main(int argc, char **argv) {
     ros::Publisher targets_pub = nh.advertise<geometry_msgs::PointStamped>("/detected_points", 10);
     ros::Publisher rviz_pub = nh.advertise<visualization_msgs::Marker>(ns + "/shapes", 10);
 
-    ros::Rate rate(100);
+    ros::Rate rate(update_rate);
  
  
-    // wait until map is received, when a map is received, mapData.header.seq will not be < 1
-    while (mapData.data.size() < 1 || (!is_map_static && mapData.header.seq < 1))  {
+    // wait until map is received
+    while (mapData.data.size() < 1)  {
         ros::spinOnce();
         ros::Duration(0.1).sleep();
     }

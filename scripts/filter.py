@@ -57,11 +57,12 @@ def node():
     threshold = rospy.get_param('~costmap_clearing_threshold', 70)
     # this can be smaller than the laser scanner range, >> smaller >>less computation time>> too small is not good, info gain won't be accurate
     info_radius = rospy.get_param('~info_radius', 1.0)
+    min_info_gain = rospy.get_param('~min_info_gain', 0.05)
     goals_topic = rospy.get_param('~goals_topic', '/detected_points')
     n_robots = rospy.get_param('~n_robots', 1)
     namespace = rospy.get_param('~namespace', '')
     namespace_init_count = rospy.get_param('namespace_init_count', 1)
-    rateHz = rospy.get_param('~rate', 10)
+    rateHz = rospy.get_param('~rate', 1)
     global_costmap_topic = rospy.get_param(
         '~global_costmap_topic', '/move_base_node/global_costmap/costmap')
     robot_frame = rospy.get_param('~robot_frame', 'base_link')
@@ -188,6 +189,8 @@ def node():
 
         else:
             rospy.logerr(f"Invalid number of frontiers: {len(detected_points)}")
+
+        rospy.loginfo(f"Number of centroids: {len(centroids)}")
         
 
 # -------------------------------------------------------------------------
@@ -207,16 +210,21 @@ def node():
                     globalmaps[i].header.frame_id, temppoint)
                 c = array([transformedPoint.point.x, transformedPoint.point.y])
                 in_obstacle = gridValue(globalmaps[i], c) > threshold
+            
+            rospy.logdebug(f"centroid: ({centroids[z][0]}, {centroids[z][1]}); in_obstacle: {in_obstacle}")
 
-            if in_obstacle or informationGain(mapData, [centroids[z][0], centroids[z][1]], info_radius * 0.5) < 0.2:
+            if in_obstacle or informationGain(mapData, [centroids[z][0], centroids[z][1]], info_radius * 0.5) < min_info_gain:
                 # information gain is too low
                 centroids = delete(centroids, (z), axis=0)
                 z = z - 1
             z = z + 1
 
+        rospy.loginfo(f"Number of filtered centroids: {len(centroids)}")
+
 
 # -------------------------------------------------------------------------
 # publishing
+
         filtered_points.points = []
         points.points = []
 
