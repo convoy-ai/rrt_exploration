@@ -8,7 +8,7 @@ from geometry_msgs.msg import Point
 from nav_msgs.msg import OccupancyGrid
 from geometry_msgs.msg import PointStamped
 import tf
-from numpy import array, vstack, delete
+from numpy import array, vstack, delete, pi
 from functions import gridValue, informationGain
 from sklearn.cluster import MeanShift
 from rrt_exploration.msg import PointArray
@@ -55,9 +55,13 @@ def node():
     # fetching all parameters
     map_topic = rospy.get_param('~map_topic', '/map')
     threshold = rospy.get_param('~costmap_clearing_threshold', 70)
+    
     # this can be smaller than the laser scanner range, >> smaller >>less computation time>> too small is not good, info gain won't be accurate
     info_radius = rospy.get_param('~info_radius', 1.0)
-    min_info_gain = rospy.get_param('~min_info_gain', 0.05)
+    
+    # minimum fraction of surrouding area around a centroid that must be unknown
+    min_info_gain = rospy.get_param('~min_info_gain', 0.25)
+    
     goals_topic = rospy.get_param('~goals_topic', '/detected_points')
     n_robots = rospy.get_param('~n_robots', 1)
     namespace = rospy.get_param('~namespace', '')
@@ -167,6 +171,11 @@ def node():
     filtered_point.z = 0.0
 
 
+# Calculate true minimum information gain to consider a centroid to be a frontier
+    # minimum area (in meters squared) of unknown space
+    true_min_info_gain = min_info_gain * pi * ((info_radius * 0.5) ** 2)
+
+
 # -------------------------------------------------------------------------
 # ---------------------     Main   Loop     -------------------------------
 # -------------------------------------------------------------------------
@@ -213,7 +222,7 @@ def node():
             
             rospy.logdebug(f"centroid: ({centroids[z][0]}, {centroids[z][1]}); in_obstacle: {in_obstacle}")
 
-            if in_obstacle or informationGain(mapData, [centroids[z][0], centroids[z][1]], info_radius * 0.5) < min_info_gain:
+            if in_obstacle or informationGain(mapData, [centroids[z][0], centroids[z][1]], info_radius * 0.5) < true_min_info_gain:
                 # information gain is too low
                 centroids = delete(centroids, (z), axis=0)
                 z = z - 1

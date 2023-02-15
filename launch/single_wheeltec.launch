@@ -22,8 +22,8 @@
   
   <node pkg="rrt_exploration" type="filter.py" name="filter" output="screen">
   <param name="map_topic" value="/map"/>
-  <param name="info_radius" value="0.5"/> 
-  <param name="min_info_gain" value="0.05" />
+  <param name="info_radius" value="1"/> 
+  <param name="min_info_gain" value="0.25" />
   <param name="costmap_clearing_threshold" value="70"/> 
   <param name="goals_topic" value="/detected_points"/>
   <param name="namespace" value=""/> 

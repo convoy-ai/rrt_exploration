@@ -91,14 +91,14 @@ def index_of_point(mapData, Xp):
     resolution = mapData.info.resolution
     origin_x = mapData.info.origin.position.x
     origin_y = mapData.info.origin.position.y
-    width = mapData.info.width
+    height = mapData.info.height
     Data = mapData.data
 
     x = Xp[0]
     y = Xp[1]
 
-    num_rows = round((x - origin_x) / resolution) * width
-    num_columns = round((y - origin_y) / resolution)
+    num_rows = round((x - origin_x) / resolution)
+    num_columns = round((y - origin_y) / resolution) * height 
     index = int(num_rows + num_columns)
     corrected_index = (index + len(Data)) % len(Data)
 
@@ -110,10 +110,10 @@ def point_of_index(mapData, i):
 
     origin_x = mapData.info.origin.position.x
     origin_y = mapData.info.origin.position.y
-    width = mapData.info.width
+    height = mapData.info.height
 
-    x = origin_x + floor(i / width) * resolution
-    y = origin_y + (i % width) * resolution
+    x = origin_x + (i % height) * resolution
+    y = origin_y + floor(i / height) * resolution 
 
     return array([x, y])
 # ________________________________________________________________________________
@@ -121,23 +121,27 @@ def point_of_index(mapData, i):
 
 def informationGain(mapData, point, r):
     info_gain_level = 0
+
     index = index_of_point(mapData, point)
     r_region = round(r/mapData.info.resolution)
-    init_index = index-r_region*(mapData.info.width+1)
-    print(f"index: {index}; init_index: {init_index}; r_region: {r_region}")
-    # print(f"map info: {mapData.info}")
-    for n in range(0, 2*r_region+1):
-        start = n*mapData.info.width+init_index
-        end = start+2*r_region
-        limit = start + 2*mapData.info.width
-        # print(f"start: {start}; end: {end}; limit: {limit}")
-        for i in range(start, end+1):
-            if (i >= 0 and i < limit and i < len(mapData.data)):
-                # if mapData.data[i] != 0:
-                    # print(f"i: {i}; data: {mapData.data[i]}; i_point: {point_of_index(mapData, i)}; norm: {norm(array(point)-point_of_index(mapData, i))}")
-                if(mapData.data[i] == -1 and norm(array(point)-point_of_index(mapData, i)) <= r):
-                    info_gain_level += 1
-    print(f"info_gain_level: {info_gain_level}")
+    height = mapData.info.height
+    init_index = index - r_region * (height + 1)
+
+    # print(f"r_region: {r_region}; init_index: {init_index}")
+
+    for col in range(0, 2 * r_region + 1):
+        col_index = init_index + col * height
+
+        for row in range(0, 2 * r_region + 1):
+            probe_index = col_index + row
+
+            if mapData.data[probe_index] == -1 and norm(array([point[0], point[1]]) - point_of_index(mapData, probe_index)) <= r:
+                info_gain_level += 1
+            
+        # print(f"column_index: {col_index}; info_gain: {info_gain_level}")
+    
+    # print(f"info_gain_level: {info_gain_level}")
+
     return info_gain_level * (mapData.info.resolution**2)
 # ________________________________________________________________________________
 
