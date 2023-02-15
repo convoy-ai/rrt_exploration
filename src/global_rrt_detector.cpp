@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
 	
     points.ns = line.ns = "markers";
     points.id = 0;
-    line.id =1;
+    line.id = 1;
 
 
     points.type = points.POINTS;
@@ -113,19 +113,19 @@ int main(int argc, char **argv) {
     line.action = line.ADD;
     points.pose.orientation.w = 1.0;
     line.pose.orientation.w = 1.0;
-    line.scale.x =  0.03;
-    line.scale.y= 0.03;
-    points.scale.x=0.3;
-    points.scale.y=0.3;
+    line.scale.x = 0.01;
+    line.scale.y = 0.01;
+    points.scale.x = 0.1;
+    points.scale.y = 0.1;
 
     // blue line, red points
     line.color.r = 9.0/255.0;
     line.color.g = 91.0/255.0;
     line.color.b = 236.0/255.0;
-    points.color.r = 255.0/255.0;
-    points.color.g = 0.0/255.0;
-    points.color.b = 0.0/255.0;
-    points.color.a = 1.0;
+    points.color.r = 9.0/255.0;
+    points.color.g = 91.0/255.0;
+    points.color.b = 236.0/255.0;
+    points.color.a = 0.3;
     line.color.a = 1.0;
     points.lifetime = ros::Duration();
     line.lifetime = ros::Duration();

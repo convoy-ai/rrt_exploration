@@ -113,10 +113,10 @@ int main(int argc, char **argv) {
     line.action = line.ADD;
     points.pose.orientation.w = 1.0;
     line.pose.orientation.w = 1.0;
-    line.scale.x =  0.03;
-    line.scale.y = 0.03;
-    points.scale.x = 0.3;
-    points.scale.y = 0.3;
+    line.scale.x =  0.01;
+    line.scale.y = 0.01;
+    points.scale.x = 0.1;
+    points.scale.y = 0.1;
 
     // red line, red points
     line.color.r =255.0/255.0;
