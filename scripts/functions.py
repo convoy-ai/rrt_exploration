@@ -1,5 +1,5 @@
 import rospy
-import tf
+import tf2_ros
 from numpy import array
 import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
@@ -14,31 +14,31 @@ from numpy import inf
 class Robot:
     def __init__(self, namespace = "", global_frame = "map", robot_frame = "base_link"):
         self.namespace = namespace # if this is an empty string, then it's simply using the global namespace
-        self.global_frame = namespace + "/" + global_frame
-        self.robot_frame = namespace + "/" + robot_frame 
+        self.global_frame = (namespace + "/" + global_frame) if len(namespace) > 0 else global_frame
+        self.robot_frame = (namespace + "/" + robot_frame) if len(namespace) > 0 else robot_frame 
         
-        self.listener = tf.TransformListener()
-        self.listener.waitForTransform(
-            self.global_frame, self.robot_frame, rospy.Time(0), rospy.Duration(10.0))
+        self.tf_buffer = tf2_ros.Buffer()
+        self.listener = tf2_ros.TransformListener(self.tf_buffer)
         
-        self.position = array([trans[0], trans[1]])
-        self.assigned_point = self.position
-
-        self.client = actionlib.SimpleActionClient(self.name+'/move_base', MoveBaseAction)
+        self.client = actionlib.SimpleActionClient(namespace + '/move_base', MoveBaseAction)
         self.client.wait_for_server()
+
+        self.position = self.getPosition()
+        self.assigned_point = self.position
 
 
     def getPosition(self):
         while True:
             try:
-                (trans, rot) = self.listener.lookupTransform(
+                trans = self.tf_buffer.lookup_transform(
                     self.global_frame, self.robot_frame, rospy.Time(0))
                 break
-            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
+            except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
                 rospy.logdebug(f"TF lookup exception: {e}")
                 rospy.sleep(0.1)
         
-        self.position = array([trans[0], trans[1]])
+        translation = trans.transform.translation
+        self.position = array([translation.x, translation.y])
         return self.position
 
 
@@ -50,7 +50,7 @@ class Robot:
 
         goal.target_pose.pose.position.x = point[0]
         goal.target_pose.pose.position.y = point[1]
-        robot.goal.target_pose.pose.orientation.w = 1.0
+        goal.target_pose.pose.orientation.w = 1.0
 
         self.client.send_goal(goal)
         self.assigned_point = array(point)
@@ -117,17 +117,19 @@ def get_information_gain(mapData, point, r):
             if mapData.data[probe_index] == -1 and norm(array([point[0], point[1]]) - point_of_index(mapData, probe_index)) <= r:
                 info_gain_level += 1
             
-    return info_gain_level * (mapData.info.resolution**2)
+    return info_gain_level * (mapData.info.resolution ** 2)
 # ________________________________________________________________________________
 
 
-def get_discounted_info_gain(mapData, assigned_pt, frontiers, info_gain, r):
+def get_discounted_info_gain(mapData, frontier, assigned_points, r):
+    info_gain_level = 0
     discount_level = 0
-
-    index = index_of_point(mapData, assigned_pt)
 
     r_region = round(r / mapData.info.resolution)
     height = mapData.info.height
+
+    index = index_of_point(mapData, frontier)
+
     init_index = index - r_region * (height + 1)
     
     for col in range(0, 2 * r_region + 1):
@@ -136,14 +138,15 @@ def get_discounted_info_gain(mapData, assigned_pt, frontiers, info_gain, r):
         for row in range(0, 2 * r_region + 1):
             probe_index = col_index + row 
 
-            if (mapData.data[probeindex] == -1):
-                for j in range(0, len(frontiers)):
-                    current_pt = frontiers[j]
+            if mapData.data[probe_index] == -1 and norm(point_of_index(mapData, probe_index) - frontier) <= r:
 
-                    if norm(point_of_index(mapData, probe_index)-current_pt) <= r and norm(point_of_index(mapData, probe_index)-assigned_pt) <= r):
+                info_gain_level += 1
+
+                for assigned_point in assigned_points:
+                    if norm(point_of_index(mapData, probe_index) - assigned_point) <= r:
                         discount_level += 1
-                    
-    return info_gain - discount_level * mapData.info.resolution ** 2
+
+    return (info_gain_level - discount_level) * (mapData.info.resolution ** 2)
 # ________________________________________________________________________________
 
 
@@ -199,7 +202,7 @@ def Nearest2(V, x):
 # ________________________________________________________________________________
 
 
-def gridValue(mapData, Xp):
+def get_grid_value(mapData, Xp):
     # returns grid value at "Xp" location
     # map data:  100 occupied      -1 unknown       0 free
 
