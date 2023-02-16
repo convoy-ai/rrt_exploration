@@ -9,7 +9,7 @@ from nav_msgs.msg import OccupancyGrid
 from geometry_msgs.msg import PointStamped
 import tf
 from numpy import array, vstack, delete, pi
-from functions import gridValue, informationGain
+import functions as fn 
 from sklearn.cluster import MeanShift
 from rrt_exploration.msg import PointArray
 
@@ -57,7 +57,7 @@ def node():
     threshold = rospy.get_param('~costmap_clearing_threshold', 70)
     
     # this can be smaller than the laser scanner range, >> smaller >>less computation time>> too small is not good, info gain won't be accurate
-    info_radius = rospy.get_param('~info_radius', 1.0)
+    info_radius = rospy.get_param('~info_radius', 0.5)
     
     # minimum fraction of surrouding area around a centroid that must be unknown
     min_info_gain = rospy.get_param('~min_info_gain', 0.25)
@@ -173,7 +173,7 @@ def node():
 
 # Calculate true minimum information gain to consider a centroid to be a frontier
     # minimum area (in meters squared) of unknown space
-    true_min_info_gain = min_info_gain * pi * ((info_radius * 0.5) ** 2)
+    true_min_info_gain = min_info_gain * pi * (info_radius ** 2)
 
 
 # -------------------------------------------------------------------------
@@ -218,11 +218,11 @@ def node():
                 transformedPoint = tf_listener.transformPoint(
                     globalmaps[i].header.frame_id, temppoint)
                 c = array([transformedPoint.point.x, transformedPoint.point.y])
-                in_obstacle = gridValue(globalmaps[i], c) > threshold
+                in_obstacle = fn.get_grid_value(globalmaps[i], c) > threshold
             
             rospy.logdebug(f"centroid: ({centroids[z][0]}, {centroids[z][1]}); in_obstacle: {in_obstacle}")
 
-            if in_obstacle or informationGain(mapData, [centroids[z][0], centroids[z][1]], info_radius * 0.5) < true_min_info_gain:
+            if in_obstacle or fn.get_information_gain(mapData, [centroids[z][0], centroids[z][1]], info_radius)  < true_min_info_gain:
                 # information gain is too low
                 centroids = delete(centroids, (z), axis=0)
                 z = z - 1

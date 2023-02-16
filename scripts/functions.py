@@ -11,79 +11,60 @@ from numpy import inf
 # ________________________________________________________________________________
 
 
-class robot:
-    goal = MoveBaseGoal()
-    start = PoseStamped()
-    end = PoseStamped()
-
-    def __init__(self, name):
-        self.assigned_point = []
-        self.name = name
-        self.global_frame = rospy.get_param('~global_frame', '/map')
-        self.robot_frame = rospy.get_param('~robot_frame', 'base_link')
-        self.plan_service = rospy.get_param(
-            '~plan_service', '/move_base_node/NavfnROS/make_plan')
+class Robot:
+    def __init__(self, namespace = "", global_frame = "map", robot_frame = "base_link"):
+        self.namespace = namespace # if this is an empty string, then it's simply using the global namespace
+        self.global_frame = namespace + "/" + global_frame
+        self.robot_frame = namespace + "/" + robot_frame 
+        
         self.listener = tf.TransformListener()
         self.listener.waitForTransform(
-            self.global_frame, self.name+'/'+self.robot_frame, rospy.Time(0), rospy.Duration(10.0))
-        cond = 0
-        while cond == 0:
-            try:
-                rospy.loginfo('Waiting for the robot transform')
-                (trans, rot) = self.listener.lookupTransform(
-                    self.global_frame, self.name+'/'+self.robot_frame, rospy.Time(0))
-                cond = 1
-            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                cond == 0
+            self.global_frame, self.robot_frame, rospy.Time(0), rospy.Duration(10.0))
+        
         self.position = array([trans[0], trans[1]])
         self.assigned_point = self.position
-        self.client = actionlib.SimpleActionClient(
-            self.name+'/move_base', MoveBaseAction)
-        self.client.wait_for_server()
-        robot.goal.target_pose.header.frame_id = self.global_frame
-        robot.goal.target_pose.header.stamp = rospy.Time.now()
 
-        rospy.wait_for_service(self.name+self.plan_service)
-        self.make_plan = rospy.ServiceProxy(
-            self.name+self.plan_service, GetPlan)
-        robot.start.header.frame_id = self.global_frame
-        robot.end.header.frame_id = self.global_frame
+        self.client = actionlib.SimpleActionClient(self.name+'/move_base', MoveBaseAction)
+        self.client.wait_for_server()
+
 
     def getPosition(self):
-        cond = 0
-        while cond == 0:
+        while True:
             try:
                 (trans, rot) = self.listener.lookupTransform(
-                    self.global_frame, self.name+'/'+self.robot_frame, rospy.Time(0))
-                cond = 1
-            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                cond == 0
+                    self.global_frame, self.robot_frame, rospy.Time(0))
+                break
+            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
+                rospy.logdebug(f"TF lookup exception: {e}")
+                rospy.sleep(0.1)
+        
         self.position = array([trans[0], trans[1]])
         return self.position
 
+
     def sendGoal(self, point):
-        robot.goal.target_pose.pose.position.x = point[0]
-        robot.goal.target_pose.pose.position.y = point[1]
+        goal = MoveBaseGoal()
+
+        goal.target_pose.header.frame_id = self.global_frame
+        goal.target_pose.header.stamp = rospy.Time.now()
+
+        goal.target_pose.pose.position.x = point[0]
+        goal.target_pose.pose.position.y = point[1]
         robot.goal.target_pose.pose.orientation.w = 1.0
-        self.client.send_goal(robot.goal)
+
+        self.client.send_goal(goal)
         self.assigned_point = array(point)
+
 
     def cancelGoal(self):
         self.client.cancel_goal()
         self.assigned_point = self.getPosition()
 
+
     def getState(self):
         return self.client.get_state()
 
-    def makePlan(self, start, end):
-        robot.start.pose.position.x = start[0]
-        robot.start.pose.position.y = start[1]
-        robot.end.pose.position.x = end[0]
-        robot.end.pose.position.y = end[1]
-        start = self.listener.transformPose(self.name+'/map', robot.start)
-        end = self.listener.transformPose(self.name+'/map', robot.end)
-        plan = self.make_plan(start=start, goal=end, tolerance=0.0)
-        return plan.plan.poses
+
 # ________________________________________________________________________________
 
 
@@ -119,15 +100,13 @@ def point_of_index(mapData, i):
 # ________________________________________________________________________________
 
 
-def informationGain(mapData, point, r):
+def get_information_gain(mapData, point, r):
     info_gain_level = 0
 
     index = index_of_point(mapData, point)
-    r_region = round(r/mapData.info.resolution)
+    r_region = round(r / mapData.info.resolution)
     height = mapData.info.height
     init_index = index - r_region * (height + 1)
-
-    # print(f"r_region: {r_region}; init_index: {init_index}")
 
     for col in range(0, 2 * r_region + 1):
         col_index = init_index + col * height
@@ -138,30 +117,33 @@ def informationGain(mapData, point, r):
             if mapData.data[probe_index] == -1 and norm(array([point[0], point[1]]) - point_of_index(mapData, probe_index)) <= r:
                 info_gain_level += 1
             
-        # print(f"column_index: {col_index}; info_gain: {info_gain_level}")
-    
-    # print(f"info_gain_level: {info_gain_level}")
-
     return info_gain_level * (mapData.info.resolution**2)
 # ________________________________________________________________________________
 
 
-def discount(mapData, assigned_pt, centroids, infoGain, r):
+def get_discounted_info_gain(mapData, assigned_pt, frontiers, info_gain, r):
+    discount_level = 0
+
     index = index_of_point(mapData, assigned_pt)
-    r_region = int(r/mapData.info.resolution)
-    init_index = index-r_region*(mapData.info.width+1)
-    for n in range(0, 2*r_region+1):
-        start = n*mapData.info.width+init_index
-        end = start+2*r_region
-        limit = ((start/mapData.info.width)+2)*mapData.info.width
-        for i in range(start, end+1):
-            if (i >= 0 and i < limit and i < len(mapData.data)):
-                for j in range(0, len(centroids)):
-                    current_pt = centroids[j]
-                    if(mapData.data[i] == -1 and norm(point_of_index(mapData, i)-current_pt) <= r and norm(point_of_index(mapData, i)-assigned_pt) <= r):
-                        # this should be modified, subtract the area of a cell, not 1
-                        infoGain[j] -= 1
-    return infoGain
+
+    r_region = round(r / mapData.info.resolution)
+    height = mapData.info.height
+    init_index = index - r_region * (height + 1)
+    
+    for col in range(0, 2 * r_region + 1):
+        col_index = init_index + col * height
+        
+        for row in range(0, 2 * r_region + 1):
+            probe_index = col_index + row 
+
+            if (mapData.data[probeindex] == -1):
+                for j in range(0, len(frontiers)):
+                    current_pt = frontiers[j]
+
+                    if norm(point_of_index(mapData, probe_index)-current_pt) <= r and norm(point_of_index(mapData, probe_index)-assigned_pt) <= r):
+                        discount_level += 1
+                    
+    return info_gain - discount_level * mapData.info.resolution ** 2
 # ________________________________________________________________________________
 
 
