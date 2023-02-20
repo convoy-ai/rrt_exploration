@@ -79,6 +79,10 @@ def node():
 	rospy.loginfo(f"Waiting for frontiers on {frontiers_topic} topic")
 	while len(frontiers)<0:
 		rospy.sleep(1)	
+	
+
+	# list of visited frontiers, to be used to discount frontiers sent from the filter node
+	visited_frontiers = []
 
 
 #-------------------------------------------------------------------------
@@ -105,13 +109,17 @@ def node():
 #------------------------------------------------------------------------- 
 # get dicounted information gain for each frontier
 
-		currently_assigned_points = [robot.assigned_point for robot in robots]
+		filtered_frontiers = []
+		info_gains = []
 
-		info_gains = [
-			fn.get_discounted_info_gain(mapData, frontier, currently_assigned_points, info_radius)
-			for frontier in frontiers
-		]
+		for frontier in frontiers:
+			info_gain = fn.get_discounted_info_gain(mapData, frontier, visited_frontiers, info_radius)
+			
+			if info_gain > 0.01: # very close to 0 gain
+				info_gains.append(info_gain)
+				filtered_frontiers.append(frontier)
 
+		rospy.loginfo(f"filtered_frontiers: {filtered_frontiers}")
 		rospy.loginfo(f"info_gains: {info_gains}")
 
 #-------------------------------------------------------------------------            
@@ -121,10 +129,11 @@ def node():
 
 		for robot_index in na:
 			robot = robots[robot_index]
+			robot.getPosition()
 			
 			revenue_list = []
 
-			for frontier_index, frontier in enumerate(frontiers):
+			for frontier_index, frontier in enumerate(filtered_frontiers):
 				info_gain = info_gains[frontier_index]
 				cost = np.linalg.norm(robot.position - frontier)
 
@@ -158,7 +167,7 @@ def node():
 				l = revenue_dict[robot_index]
 				revenue_dict[robot_index] = [l[i] for i in range(0, len(l)) if i != selected_frontier_index]
 
-			new_assigned_points.append(frontiers[selected_frontier_index])
+			new_assigned_points.append(filtered_frontiers[selected_frontier_index])
 
 		rospy.loginfo(f"new_assigned_points: {new_assigned_points}")
 		
@@ -172,6 +181,7 @@ def node():
 		
 		for robot_index, assigned_point in new_assignment:
 			robots[robot_index].sendGoal(assigned_point)
+			visited_frontiers.append(assigned_point)
 
 		if len(new_assignment) > 0:
 			rospy.sleep(delay_after_assignment)

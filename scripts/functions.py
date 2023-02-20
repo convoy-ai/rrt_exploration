@@ -121,7 +121,7 @@ def get_information_gain(mapData, point, r):
 # ________________________________________________________________________________
 
 
-def get_discounted_info_gain(mapData, frontier, assigned_points, r):
+def get_discounted_info_gain(mapData, frontier, visited_frontiers, r):
     info_gain_level = 0
     discount_level = 0
 
@@ -142,8 +142,8 @@ def get_discounted_info_gain(mapData, frontier, assigned_points, r):
 
                 info_gain_level += 1
 
-                for assigned_point in assigned_points:
-                    if norm(point_of_index(mapData, probe_index) - assigned_point) <= r:
+                for visited_frontier in visited_frontiers:
+                    if norm(point_of_index(mapData, probe_index) - visited_frontier) <= r:
                         discount_level += 1
 
     return (info_gain_level - discount_level) * (mapData.info.resolution ** 2)
