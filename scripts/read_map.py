@@ -11,6 +11,7 @@ from geometry_msgs.msg import PoseStamped
 from numpy import floor
 from numpy.linalg import norm
 from numpy import inf
+import matplotlib.pyplot as plt
 import functions as fn
 
 def get_map_client():
@@ -28,19 +29,28 @@ if __name__ == "__main__":
     mapData = get_map_client()
 
     print(mapData.info)
+    print(f"data length: {len(mapData.data)}")
 
     x = float(sys.argv[1])
     y = float(sys.argv[2])
 
     point = np.array([x, y])
 
-    index = fn.index_of_point(mapData, point)
-    grid_value = fn.gridValue(mapData, point)
-    converted_point = fn.point_of_index(mapData, index)
+    index = fn.point_to_index(mapData, point)
+    grid_value = fn.get_grid_value(mapData, point)
+    converted_point = fn.index_to_point(mapData, index)
+
+    data_2d = fn.map_to_2d(mapData)
 
     print(f"index: {index}; grid_value: {grid_value}; converted_point: {converted_point}")
 
-    # points = [mapData.data[index + i * mapData.info.height] for i in range(10, -11, -1)]
+    # data_2d[data_2d == 0] = 255
+    # data_2d[data_2d == 100] = 0
+    # data_2d[data_2d == -1] = 100
 
-    info_gain = fn.informationGain(mapData, point, 0.5)
+    # plt.imshow(data_2d, aspect='equal', origin='lower')
+    # plt.show()
+
+    info_gain = fn.get_information_gain(mapData, point, 0.5)
     print(f"info_gain: {info_gain}")
+ 

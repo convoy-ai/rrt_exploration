@@ -223,7 +223,7 @@ def node():
                 in_obstacle = fn.get_grid_value(globalmaps[i], c) > threshold
             
             info_gain = fn.get_information_gain(mapData, [centroids[z][0], centroids[z][1]], info_radius)
-            rospy.loginfo(f"centroid: ({centroids[z][0]}, {centroids[z][1]}); info_gain: {info_gain}")
+            rospy.logdebug(f"centroid: ({centroids[z][0]}, {centroids[z][1]}); info_gain: {info_gain}")
 
             if in_obstacle or info_gain < true_min_info_gain:
                 # information gain is too low

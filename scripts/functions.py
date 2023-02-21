@@ -8,6 +8,8 @@ from geometry_msgs.msg import PoseStamped
 from numpy import floor
 from numpy.linalg import norm
 from numpy import inf
+import numpy as np
+
 # ________________________________________________________________________________
 
 
@@ -67,34 +69,30 @@ class Robot:
 
 # ________________________________________________________________________________
 
-
-def index_of_point(mapData, Xp):
-    resolution = mapData.info.resolution
-    origin_x = mapData.info.origin.position.x
-    origin_y = mapData.info.origin.position.y
-    height = mapData.info.height
-    Data = mapData.data
-
-    x = Xp[0]
-    y = Xp[1]
-
-    num_rows = round((x - origin_x) / resolution)
-    num_columns = round((y - origin_y) / resolution) * height 
-    index = int(num_rows + num_columns)
-    corrected_index = (index + len(Data)) % len(Data)
-
-    return corrected_index
+def map_to_2d(mapData):
+    return np.resize(np.array(mapData.data), (mapData.info.height, mapData.info.width))
 
 
-def point_of_index(mapData, i):
+def point_to_index(mapData, point):
+    origin_x, origin_y = mapData.info.origin.position.x, mapData.info.origin.position.y
     resolution = mapData.info.resolution
 
-    origin_x = mapData.info.origin.position.x
-    origin_y = mapData.info.origin.position.y
-    height = mapData.info.height
+    x, y = point[0], point[1]
 
-    x = origin_x + (i % height) * resolution
-    y = origin_y + floor(i / height) * resolution 
+    index_x = int(round((x - origin_x) / resolution))
+    index_y = int(round((y - origin_y) / resolution))
+
+    return [index_x, index_y]
+
+
+def index_to_point(mapData, index):
+    origin_x, origin_y = mapData.info.origin.position.x, mapData.info.origin.position.y
+    resolution = mapData.info.resolution
+
+    index_x, index_y = index[0], index[1]
+
+    x = origin_x + index_x * resolution
+    y = origin_y + index_y * resolution
 
     return array([x, y])
 # ________________________________________________________________________________
@@ -103,18 +101,19 @@ def point_of_index(mapData, i):
 def get_information_gain(mapData, point, r):
     info_gain_level = 0
 
-    index = index_of_point(mapData, point)
+    index = point_to_index(mapData, point)
     r_region = round(r / mapData.info.resolution)
-    height = mapData.info.height
-    init_index = index - r_region * (height + 1)
+    data_2d = map_to_2d(mapData)
+    
+    init_index_x = index[0] - r_region
+    init_index_y = index[1] - r_region
 
-    for col in range(0, 2 * r_region + 1):
-        col_index = init_index + col * height
+    for index_y in range(init_index_y, init_index_y + 2 * r_region + 1):
 
-        for row in range(0, 2 * r_region + 1):
-            probe_index = col_index + row
+        for index_x in range(init_index_x, init_index_x + 2 * r_region + 1):
+            probe_index = [index_x, index_y]
 
-            if mapData.data[probe_index] == -1 and norm(array([point[0], point[1]]) - point_of_index(mapData, probe_index)) <= r:
+            if data_2d[index_y][index_x] == -1 and norm(point - index_to_point(mapData, probe_index)) <= r:
                 info_gain_level += 1
             
     return info_gain_level * (mapData.info.resolution ** 2)
@@ -125,25 +124,24 @@ def get_discounted_info_gain(mapData, frontier, visited_frontiers, r):
     info_gain_level = 0
     discount_level = 0
 
+    index = point_to_index(mapData, frontier)
     r_region = round(r / mapData.info.resolution)
-    height = mapData.info.height
-
-    index = index_of_point(mapData, frontier)
-
-    init_index = index - r_region * (height + 1)
+    data_2d = map_to_2d(mapData)
     
-    for col in range(0, 2 * r_region + 1):
-        col_index = init_index + col * height
+    init_index_x = index[0] - r_region
+    init_index_y = index[1] - r_region
+    
+    for index_y in range(init_index_y, init_index_y + 2 * r_region + 1):
         
-        for row in range(0, 2 * r_region + 1):
-            probe_index = col_index + row 
+        for index_x in range(init_index_x, init_index_x + 2 * r_region + 1):
+            probe_index = [index_x, index_y]
 
-            if mapData.data[probe_index] == -1 and norm(point_of_index(mapData, probe_index) - frontier) <= r:
+            if data_2d[index_y][index_x] == -1 and norm(index_to_point(mapData, probe_index) - frontier) <= r:
 
                 info_gain_level += 1
 
                 for visited_frontier in visited_frontiers:
-                    if norm(point_of_index(mapData, probe_index) - visited_frontier) <= r:
+                    if norm(index_to_point(mapData, probe_index) - visited_frontier) <= r:
                         discount_level += 1
 
     return (info_gain_level - discount_level) * (mapData.info.resolution ** 2)
@@ -206,6 +204,7 @@ def get_grid_value(mapData, Xp):
     # returns grid value at "Xp" location
     # map data:  100 occupied      -1 unknown       0 free
 
-    index = index_of_point(mapData, Xp)
+    index = point_to_index(mapData, Xp)
+    data_2d = map_to_2d(mapData)
 
-    return mapData.data[index]
+    return data_2d[index[1]][index[0]]
