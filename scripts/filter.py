@@ -55,6 +55,8 @@ def node():
     # fetching all parameters
     map_topic = rospy.get_param('~map_topic', '/map')
     threshold = rospy.get_param('~costmap_clearing_threshold', 70)
+
+    clustering_bandwidth = rospy.get_param('~clustering_bandwidth', 0.3)
     
     # this can be smaller than the laser scanner range, >> smaller >>less computation time>> too small is not good, info gain won't be accurate
     info_radius = rospy.get_param('~info_radius', 0.5)
@@ -192,7 +194,7 @@ def node():
             centroids = detected_points
 
         elif len(detected_points) > 1:
-            ms = MeanShift(bandwidth=0.3)
+            ms = MeanShift(bandwidth=clustering_bandwidth)
             ms.fit(detected_points)
             centroids = ms.cluster_centers_  # centroids array is the centers of each cluster
 
