@@ -29,7 +29,7 @@
   <param name="goals_topic" value="/detected_points"/>
   <param name="namespace" value=""/> 
   <param name="n_robots" value="1"/>
-  <param name="rate" value="0.25"/>
+  <param name="rate" value="0.5"/>
   <param name="global_costmap_topic" value="/map" />
   <param name="robot_frame" value="base_link" />
   </node>
@@ -45,7 +45,7 @@
   <param name="n_robots" value="1"/>
   <param name="namespace" value=""/>
   <param name="delay_after_assignment" value="0.5"/>
-  <param name="rate" value="0.25"/>
+  <param name="rate" value="0.5"/>
   </node>
   
 </launch>
