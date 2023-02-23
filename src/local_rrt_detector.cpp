@@ -69,11 +69,11 @@ int main(int argc, char **argv) {
     int update_rate;
 
     std::string ns;
-    ns=ros::this_node::getName();
+    ns=ros::this_node::getNamespace();
 
     ros::param::param<float>(ns + "/eta", eta, 0.5);
-    ros::param::param<std::string>(ns + "/map_topic", map_topic, "/robot_1/map");
-    ros::param::param<std::string>(ns + "/base_link", base_frame_topic, "/robot_1/base_link");
+    ros::param::param<std::string>(ns + "/map_topic", map_topic, "/map");
+    ros::param::param<std::string>(ns + "/base_link", base_frame_topic, "/base_link");
     ros::param::param<int>(ns + "/rate", update_rate, 10);
 
     //---------------------------------------------------------------

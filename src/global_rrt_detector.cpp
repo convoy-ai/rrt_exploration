@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
     ns = ros::this_node::getName();
 
     nh.param<float>(ns + "/eta", eta, 0.5);
-    nh.param<std::string>(ns + "/map_topic", map_topic, "/robot_1/map");
+    nh.param<std::string>(ns + "/map_topic", map_topic, "/map");
     nh.param<int>(ns + "/rate", update_rate, 100);
 
     //---------------------------------------------------------------
