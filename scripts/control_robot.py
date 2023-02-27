@@ -24,10 +24,10 @@ def node():
         
         rospy.loginfo(f"position: {robot.position}")
         
-        rospy.loginfo(f"robot state: {robot.getState()}")
+        rospy.loginfo(f"robot state: {robot.get_state()}")
         
-        if robot.getState() != 1:
-            robot.sendGoal(points[index])            
+        if robot.get_state() != 1:
+            robot.send_goal(points[index])            
             index = (index + 1) % len(points)
 
         rate.sleep()
