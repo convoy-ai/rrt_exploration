@@ -18,7 +18,6 @@ from rrt_exploration.msg import PointArray
 
 world_map = OccupancyGrid()
 detected_points = [] # wrt to world map which is global
-robot_maps = {} # dict of robot maps by robot namespace
 
 
 def world_map_callback(data):
@@ -36,19 +35,13 @@ def detected_points_callback(data, args):
     new_point = [transformed_point.point.x, transformed_point.point.y]
     detected_points.append(new_point)
 
-def create_robot_map_callback(robot_namespace):
-    def robot_map_callback(data):
-        global robot_maps
-        robot_maps[robot_namespace] = data
-    
-    return robot_map_callback
 
 
 # Node----------------------------------------------
 
 
 def node():
-    global tf_buffer, tf_listener, world_map, detected_points, robot_maps
+    global world_map, detected_points
 
     rospy.init_node('filter', anonymous=False)
 
@@ -65,11 +58,9 @@ def node():
     
     goals_topic = rospy.get_param('~goals_topic', '/detected_points')
     
-    robot_count = rospy.get_param('robot_count', 1)
-
     obstacle_threshold = rospy.get_param('~obstacle_threshold', 70)
     obstacle_radius = rospy.get_param('~obstacle_radius', 0.3) # radius around a frontier point to search for obstacles
-    obstacle_max_level = rospy.get_param('~obstacle_max_level', 0.02)
+    obstacle_max_level = rospy.get_param('~obstacle_max_level', 0.03)
     
     rateHz = rospy.get_param('~rate', 1)
 
@@ -78,13 +69,9 @@ def node():
     tf_buffer = tf2_ros.Buffer()
     tf_listener = tf2_ros.TransformListener(tf_buffer)
 
-    robot_namespaces = [f"robot_{i}" for i in range(1, robot_count + 1)]
 
 # -------------------------------------------
     rospy.Subscriber(map_topic, OccupancyGrid, world_map_callback)
-
-    # for robot_namespace in robot_namespaces:
-    #     rospy.Subscriber(f'{robot_namespace}/map', OccupancyGrid, create_robot_map_callback(robot_namespace))
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -94,10 +81,6 @@ def node():
     while (len(world_map.data) < 1):
         rospy.sleep(0.1)
 
-
-    # rospy.loginfo("Waiting for robot maps")
-    # while len(robot_maps.keys()) != len(robot_namespaces):
-    #     rospy.sleep(0.1)
 
 
     rospy.Subscriber(goals_topic, PointStamped, callback=detected_points_callback,
@@ -145,11 +128,6 @@ def node():
     # an instance of Point to be appended into markers array
     marker = Point()
     marker.z = 0
-
-    # temporary point for use in tf transform lookup
-    temppoint = tf2_geometry_msgs.PointStamped()
-    temppoint.header.frame_id = world_map.header.frame_id
-    temppoint.point.z = 0.0
 
     # filtered points array
     filtered_points = PointArray()
