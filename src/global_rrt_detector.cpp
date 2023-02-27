@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
     points.color.r = 9.0/255.0;
     points.color.g = 91.0/255.0;
     points.color.b = 236.0/255.0;
-    points.color.a = 0.3;
+    points.color.a = 1.0;
     line.color.a = 1.0;
     points.lifetime = ros::Duration();
     line.lifetime = ros::Duration();
