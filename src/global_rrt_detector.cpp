@@ -70,8 +70,7 @@ int main(int argc, char **argv) {
     std::string map_topic, base_frame_topic;
     int update_rate;
 
-    std::string ns;
-    ns = ros::this_node::getName();
+    std::string ns = ros::this_node::getName();
 
     nh.param<float>(ns + "/eta", eta, 0.5);
     nh.param<std::string>(ns + "/map_topic", map_topic, "/map");

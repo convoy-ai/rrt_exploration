@@ -65,16 +65,17 @@ int main(int argc, char **argv) {
   
     // fetching all parameters
     float eta,init_map_x,init_map_y,range;
-    std::string map_topic, base_frame_topic;
+    std::string map_topic, base_frame;
     int update_rate;
 
-    std::string ns;
-    ns=ros::this_node::getNamespace();
+    std::string ns = ros::this_node::getName();
+
 
     ros::param::param<float>(ns + "/eta", eta, 0.5);
-    ros::param::param<std::string>(ns + "/map_topic", map_topic, "/map");
-    ros::param::param<std::string>(ns + "/base_link", base_frame_topic, "/base_link");
-    ros::param::param<int>(ns + "/rate", update_rate, 10);
+    ros::param::param<std::string>(ns + "/map_topic", map_topic, "map");
+    ros::param::param<std::string>(ns + "/base_frame", base_frame, "base_link");
+    ros::param::param<int>(ns + "/rate", update_rate, 20);
+
 
     //---------------------------------------------------------------
     ros::Subscriber map_sub= nh.subscribe(map_topic, 100, mapCallBack);
@@ -135,7 +136,6 @@ int main(int argc, char **argv) {
 
     while (points.points.size() < 5) {
         ros::spinOnce();
-        rviz_pub.publish(points) ;
     }
 
     ROS_INFO("Local detector: begin building RRT");
@@ -233,10 +233,10 @@ int main(int argc, char **argv) {
             while (found_transform==0) {
                 try {
                     found_transform = 1;
-                    listener.lookupTransform(map_topic, base_frame_topic, ros::Time(0), transform);
+                    listener.lookupTransform(mapData.header.frame_id, base_frame, ros::Time(0), transform);
                 }
                 catch (tf::TransformException ex) {
-                    ROS_WARN(ex.what());
+                    ROS_WARN("%s", ex.what());
                     found_transform = 0;
                     ros::Duration(1).sleep();
                 }
@@ -246,7 +246,7 @@ int main(int argc, char **argv) {
             x_new[1] = transform.getOrigin().y();
             V.push_back(x_new);
             line.points.clear();
-            ROS_INFO("Reset local RRT");
+            ROS_DEBUG("Reset local RRT");
         } else if (checking == 1) {
             V.push_back(x_new);
 
