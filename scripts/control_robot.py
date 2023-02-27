@@ -12,15 +12,15 @@ def node():
     rate = rospy.Rate(0.05)
 
     points = [
-        np.array([-0.4, 0.5]),
-        np.array([-0.4, 0]),
-        np.array([-0.6, 0]),
-        np.array([-0.6, 0.5])
+        np.array([-2.0, 1.0]),
+        np.array([-2.0, -0.9]),
+        np.array([-0.5, -0.9]),
+        np.array([-0.5, 1.0])
     ]
     index = 0
 
     while not rospy.is_shutdown():
-        robot = fn.Robot() 
+        robot = fn.Robot(namespace="robot_1") 
         
         rospy.loginfo(f"position: {robot.position}")
         
