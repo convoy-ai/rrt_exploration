@@ -172,6 +172,9 @@ def node():
 
 			revenue_list = revenue_dict[robot_namespace]
 
+			if len(revenue_list) == 0:
+				break
+
 			selected_frontier_index = np.argmax(np.array(revenue_list))
 			
 			# remove frontier from every list in revenue dict
