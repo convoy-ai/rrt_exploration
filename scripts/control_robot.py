@@ -9,7 +9,7 @@ import functions as fn
 def node():
     rospy.init_node('control_robot', anonymous=False)
 
-    rate = rospy.Rate(0.05)
+    rate = rospy.Rate(1)
 
     points = [
         np.array([-2.0, 1.0]),
@@ -19,14 +19,18 @@ def node():
     ]
     index = 0
 
+    robot = fn.Robot(global_map_frame="world", robot_map_frame="robot_1/map", robot_base_frame="robot_1/base_link", move_base_node="/robot_1/move_base")
+
+
     while not rospy.is_shutdown():
-        robot = fn.Robot(namespace="robot_1") 
+
+        state = robot.get_state()
+        rospy.loginfo(f"robot state: {state}")
+
+        if robot.is_idle():
         
-        rospy.loginfo(f"position: {robot.position}")
+            rospy.loginfo(f"position: {robot.position}")
         
-        rospy.loginfo(f"robot state: {robot.get_state()}")
-        
-        if robot.get_state() != 1:
             robot.send_goal(points[index])            
             index = (index + 1) % len(points)
 

@@ -16,16 +16,15 @@ import numpy as np
 
 
 class Robot:
-    def __init__(self, namespace = "", global_map_frame = "map", robot_map_frame = "map", robot_base_frame = "base_link"):
-        self.namespace = namespace # if this is an empty string, then it's simply using the global namespace
-        self.global_map_frame = (namespace + "/" + global_map_frame) if len(namespace) > 0 else global_map_frame
-        self.robot_map_frame = (namespace + "/" + robot_map_frame) if len(namespace) > 0 else robot_map_frame
-        self.robot_base_frame = (namespace + "/" + robot_base_frame) if len(namespace) > 0 else robot_base_frame
+    def __init__(self, global_map_frame = "map", robot_map_frame = "map", robot_base_frame = "base_link", move_base_node = "/move_base"):
+        self.global_map_frame = global_map_frame
+        self.robot_map_frame = robot_map_frame
+        self.robot_base_frame = robot_base_frame
         
         self.tf_buffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tf_buffer)
         
-        self.client = actionlib.SimpleActionClient(namespace + '/move_base', MoveBaseAction)
+        self.client = actionlib.SimpleActionClient(move_base_node, MoveBaseAction)
         self.client.wait_for_server()
 
         self.position = self.get_position()
@@ -37,10 +36,10 @@ class Robot:
         while True:
             try:
                 trans = self.tf_buffer.lookup_transform(
-                    self.global_map_frame, self.robot_base_frame, rospy.Time(0))
+                    self.global_map_frame, self.robot_base_frame, rospy.Time())
                 break
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-                rospy.logdebug(f"TF lookup exception: {e}")
+                rospy.logwarn(f"TF lookup exception: {e}")
                 rospy.sleep(0.1)
         
         translation = trans.transform.translation
@@ -56,11 +55,11 @@ class Robot:
             point=Point(point[0], point[1], 0)
         )
 
-        rospy.loginfo(f"point: {point_stamped}")
+        rospy.logdebug(f"point: {point_stamped}")
 
         transformed_point = self.tf_buffer.transform(point_stamped, self.robot_map_frame, rospy.Duration(10.0))
 
-        rospy.loginfo(f"transformed_point: {transformed_point}")
+        rospy.logdebug(f"transformed_point: {transformed_point}")
 
         goal = MoveBaseGoal()
 
@@ -85,7 +84,7 @@ class Robot:
     
 
     def is_idle(self):
-        return self.client.get_state() in [2,3,4,5,8] 
+        return self.client.get_state() in [2,3,4,5,8,9] 
         # see http://docs.ros.org/en/api/actionlib_msgs/html/msg/GoalStatus.html
 
 
