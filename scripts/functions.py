@@ -2,9 +2,11 @@ import rospy
 import tf2_ros
 from numpy import array
 import actionlib
+from std_msgs.msg import Header
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from nav_msgs.srv import GetPlan
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Point
+from tf2_geometry_msgs import PointStamped
 from numpy import floor
 from numpy.linalg import norm
 from numpy import inf
@@ -14,29 +16,30 @@ import numpy as np
 
 
 class Robot:
-    def __init__(self, namespace = "", global_frame = "map", robot_frame = "base_link"):
-        self.namespace = namespace # if this is an empty string, then it's simply using the global namespace
-        self.global_frame = (namespace + "/" + global_frame) if len(namespace) > 0 else global_frame
-        self.robot_frame = (namespace + "/" + robot_frame) if len(namespace) > 0 else robot_frame 
+    def __init__(self, global_map_frame = "map", robot_map_frame = "map", robot_base_frame = "base_link", move_base_node = "/move_base"):
+        self.global_map_frame = global_map_frame
+        self.robot_map_frame = robot_map_frame
+        self.robot_base_frame = robot_base_frame
         
         self.tf_buffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tf_buffer)
         
-        self.client = actionlib.SimpleActionClient(namespace + '/move_base', MoveBaseAction)
+        self.client = actionlib.SimpleActionClient(move_base_node, MoveBaseAction)
         self.client.wait_for_server()
 
-        self.position = self.getPosition()
+        self.position = self.get_position()
         self.assigned_point = self.position
 
 
-    def getPosition(self):
+    def get_position(self):
+        # wrt to global map frame
         while True:
             try:
                 trans = self.tf_buffer.lookup_transform(
-                    self.global_frame, self.robot_frame, rospy.Time(0))
+                    self.global_map_frame, self.robot_base_frame, rospy.Time())
                 break
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-                rospy.logdebug(f"TF lookup exception: {e}")
+                rospy.logwarn(f"TF lookup exception: {e}")
                 rospy.sleep(0.1)
         
         translation = trans.transform.translation
@@ -44,27 +47,45 @@ class Robot:
         return self.position
 
 
-    def sendGoal(self, point):
+    def send_goal(self, point):
+        # point is wrt to global map frame
+
+        point_stamped = PointStamped(
+            header=Header(stamp=rospy.Time.now(), frame_id=self.global_map_frame), 
+            point=Point(point[0], point[1], 0)
+        )
+
+        rospy.logdebug(f"point: {point_stamped}")
+
+        transformed_point = self.tf_buffer.transform(point_stamped, self.robot_map_frame, rospy.Duration(10.0))
+
+        rospy.logdebug(f"transformed_point: {transformed_point}")
+
         goal = MoveBaseGoal()
 
-        goal.target_pose.header.frame_id = self.global_frame
+        goal.target_pose.header.frame_id = self.robot_map_frame
         goal.target_pose.header.stamp = rospy.Time.now()
 
-        goal.target_pose.pose.position.x = point[0]
-        goal.target_pose.pose.position.y = point[1]
+        goal.target_pose.pose.position.x = transformed_point.point.x
+        goal.target_pose.pose.position.y = transformed_point.point.y
         goal.target_pose.pose.orientation.w = 1.0
 
         self.client.send_goal(goal)
         self.assigned_point = array(point)
 
 
-    def cancelGoal(self):
+    def cancel_goal(self):
         self.client.cancel_goal()
-        self.assigned_point = self.getPosition()
+        self.assigned_point = self.get_position()
 
 
-    def getState(self):
+    def get_state(self):
         return self.client.get_state()
+    
+
+    def is_idle(self):
+        return self.client.get_state() in [2,3,4,5,8,9] 
+        # see http://docs.ros.org/en/api/actionlib_msgs/html/msg/GoalStatus.html
 
 
 # ________________________________________________________________________________
@@ -95,8 +116,29 @@ def index_to_point(mapData, index):
     y = origin_y + index_y * resolution
 
     return array([x, y])
+
+
 # ________________________________________________________________________________
 
+def check_if_near_obstacle(mapData, point, r, obstacle_threshold, obstacle_max_level):
+    obstacle_count = 0
+
+    index = point_to_index(mapData, point)
+    r_region = round(r / mapData.info.resolution)
+    data_2d = map_to_2d(mapData)
+    
+    init_index_x = index[0] - r_region
+    init_index_y = index[1] - r_region
+
+    for index_y in range(init_index_y, init_index_y + 2 * r_region + 1):
+
+        for index_x in range(init_index_x, init_index_x + 2 * r_region + 1):
+            probe_index = [index_x, index_y]
+
+            if data_2d[index_y][index_x] > obstacle_threshold and norm(point - index_to_point(mapData, probe_index)) <= r:
+                obstacle_count += 1
+    
+    return obstacle_count * (mapData.info.resolution ** 2) > obstacle_max_level
 
 def get_information_gain(mapData, point, r):
     info_gain_level = 0
@@ -117,6 +159,8 @@ def get_information_gain(mapData, point, r):
                 info_gain_level += 1
             
     return info_gain_level * (mapData.info.resolution ** 2)
+
+
 # ________________________________________________________________________________
 
 
@@ -145,58 +189,8 @@ def get_discounted_info_gain(mapData, frontier, visited_frontiers, r):
                         discount_level += 1
 
     return (info_gain_level - discount_level) * (mapData.info.resolution ** 2)
-# ________________________________________________________________________________
 
 
-def pathCost(path):
-    if (len(path) > 0):
-        i = len(path)/2
-        p1 = array([path[i-1].pose.position.x, path[i-1].pose.position.y])
-        p2 = array([path[i].pose.position.x, path[i].pose.position.y])
-        return norm(p1-p2)*(len(path)-1)
-    else:
-        return inf
-# ________________________________________________________________________________
-
-
-def unvalid(mapData, pt):
-    index = index_of_point(mapData, pt)
-    r_region = 5
-    init_index = index-r_region*(mapData.info.width+1)
-    for n in range(0, 2*r_region+1):
-        start = n*mapData.info.width+init_index
-        end = start+2*r_region
-        limit = ((start/mapData.info.width)+2)*mapData.info.width
-        for i in range(start, end+1):
-            if (i >= 0 and i < limit and i < len(mapData.data)):
-                if(mapData.data[i] == 1):
-                    return True
-    return False
-# ________________________________________________________________________________
-
-
-def Nearest(V, x):
-    n = inf
-    i = 0
-    for i in range(0, V.shape[0]):
-        n1 = norm(V[i, :]-x)
-        if (n1 < n):
-            n = n1
-            result = i
-    return result
-
-# ________________________________________________________________________________
-
-
-def Nearest2(V, x):
-    n = inf
-    result = 0
-    for i in range(0, len(V)):
-        n1 = norm(V[i]-x)
-
-        if (n1 < n):
-            n = n1
-    return i
 # ________________________________________________________________________________
 
 
