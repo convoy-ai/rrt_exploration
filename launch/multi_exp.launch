@@ -1,0 +1,60 @@
+<!-- Launch file for the rrt-detector and the assigner -->
+
+
+<launch>
+
+  <arg name="eta" value="0.25"/>
+  <arg name="Geta" value="1.0"/>
+
+  <node pkg="rrt_exploration" type="global_rrt_detector" name="global_detector" output="screen">
+    <param name="eta" value="$(arg Geta)"/>
+    <param name="map_topic" value="/map"/>
+    <param name="rate" value="10" />
+  </node>
+
+  <group ns="robot_1">
+  
+    <node pkg="rrt_exploration" type="local_rrt_detector" name="local_detector" output="screen">
+      <param name="eta" value="$(arg eta)"/>
+      <param name="base_frame" value="robot_1/base_link" />
+      <param name="rate" value="20" />
+    </node>
+ 
+  </group>
+
+  <group ns="robot_2">
+  
+    <node pkg="rrt_exploration" type="local_rrt_detector" name="local_detector" output="log">
+      <param name="eta" value="$(arg eta)"/>
+      <param name="base_frame" value="robot_2/base_link" />
+      <param name="rate" value="20" />
+    </node>
+ 
+  </group>
+  
+  <node pkg="rrt_exploration" type="filter.py" name="filter" output="screen">
+    <param name="map_topic" value="/map"/>
+    <param name="clustering_bandwidth" value="0.4"/>
+    <param name="info_radius" value="0.5"/> 
+    <param name="min_info_gain" value="0.275" />
+    <param name="obstacle_threshold" value="70"/> 
+    <param name="goals_topic" value="/detected_points"/>
+    <param name="robot_count" value="2"/>
+    <param name="rate" value="1.0"/>
+  </node>
+  
+  <node pkg="rrt_exploration" type="assigner.py" name="assigner" output="screen">
+    <param name="map_topic" value="/map"/>
+    <param name="info_radius" value="0.5"/> 
+    <param name="info_multiplier" value="3.0"/> 
+    <param name="hysteresis_radius" value="3.0"/> 
+    <param name="hysteresis_gain" value="4.0"/> 
+    <param name="min_discounted_info_gain" value="0.2"/> 
+    <param name="frontiers_topic" value="/filtered_points"/> 
+    <param name="common_name" value="robot_"/>
+    <param name="robot_count" value="2"/>
+    <param name="delay_after_assignment" value="0.5"/>
+    <param name="rate" value="0.5"/>
+  </node>
+  
+</launch>
