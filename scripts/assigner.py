@@ -8,6 +8,7 @@ from geometry_msgs.msg import Point
 from nav_msgs.msg import OccupancyGrid
 from rrt_exploration.msg import PointArray
 import numpy as np
+import math
 import functions as fn
 
 # Subscribers' callbacks------------------------------
@@ -125,17 +126,19 @@ def node():
 			if robots[robot_namespace].is_idle()
 		]
 
-		for robot_namespace in robot_namespaces:
-			state = robots[robot_namespace].get_state()
-			rospy.logwarn(f"robot: {robot_namespace}; state: {state}")
-
 		rospy.loginfo(f"Available robots: {robots_idle}")
+
+		if len(robots_idle) == 0:
+			rospy.loginfo(f"No available robots")
+			rate.sleep()
+			continue
 
 
 #-------------------------------------------------------------------------            
 # for each idle robot, compute revenue
 
-		revenue_dict = {} # dictionary with key = robot namepace, value = revenue of frontiers
+
+		revenue_2d = None
 
 		for robot_namespace in robots_idle:
 			robot = robots[robot_namespace]
@@ -163,29 +166,47 @@ def node():
 
 				revenue_list.append(revenue)
 			
-			revenue_dict[robot_namespace] = revenue_list
+			# revenue_dict[robot_namespace] = revenue_list
+			if revenue_2d is None:
+				revenue_2d = np.array([revenue_list])
+			else:
+				revenue_2d = np.vstack((revenue_2d, np.array(revenue_list)))
 
 			rospy.loginfo("----------------------------")
 
 
 		new_assignment = {} # dict with key = robot namespace, value = new assigned point
+
+
+		robot_frontier_indices = []
+
+		for i in range(revenue_2d.shape[0]):
+			for j in range(revenue_2d.shape[1]):
+				robot_frontier_indices.append([i, j])
 		
+		robot_frontier_indices = np.resize(np.array(robot_frontier_indices), (revenue_2d.shape[0], revenue_2d.shape[1], 2))
+		rospy.loginfo(f"revenue_2d: {revenue_2d}")
+		
+		while revenue_2d.size != 0:
+		
+			best_revenue_index = np.argmax(revenue_2d)
+			row_count, column_count = revenue_2d.shape
+			row_index = math.floor(best_revenue_index / column_count)
+			col_index = best_revenue_index % column_count
 
-		for robot_namespace in robots_idle:
+			rospy.loginfo(f"best_revenue_index: {best_revenue_index}; row_index: {row_index}, col_index: {col_index}")
 
-			revenue_list = revenue_dict[robot_namespace]
+			robot_index, frontier_index = robot_frontier_indices[row_index, col_index]
+			new_assignment[robots_idle[robot_index]] = filtered_frontiers[frontier_index]
 
-			if len(revenue_list) == 0:
-				break
+			revenue_2d = np.delete(revenue_2d, row_index, 0)
+			revenue_2d = np.delete(revenue_2d, col_index, 1)
+			robot_frontier_indices = np.delete(robot_frontier_indices, row_index, 0)
+			robot_frontier_indices = np.delete(robot_frontier_indices, col_index, 1)
 
-			selected_frontier_index = np.argmax(np.array(revenue_list))
-			
-			# remove frontier from every list in revenue dict
-			for k in revenue_dict.keys():
-				l = revenue_dict[k]
-				revenue_dict[k] = [l[i] for i in range(0, len(l)) if i != selected_frontier_index]
+			rospy.loginfo(f"revenue_2d: {revenue_2d}; robot_frontier_indices: {robot_frontier_indices}")
+			rospy.loginfo(f"size: {revenue_2d.size}")
 
-			new_assignment[robot_namespace] = filtered_frontiers[selected_frontier_index]
 
 		rospy.loginfo(f"new_assignment: {new_assignment}")
 		
@@ -194,7 +215,9 @@ def node():
 # send move base goal for each robot
 
 		for robot_namespace, assigned_point in new_assignment.items():
-			robots[robot_namespace].send_goal(assigned_point)
+			robot = robots[robot_namespace]
+			
+			robot.send_goal(assigned_point)
 			visited_frontiers.append(assigned_point)
 
 		if len(new_assignment.keys()) > 0:
