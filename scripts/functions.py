@@ -21,7 +21,7 @@ class Robot:
         self.robot_map_frame = robot_map_frame
         self.robot_base_frame = robot_base_frame
         
-        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_buffer = tf2_ros.Buffer(rospy.Duration(10.0))
         self.listener = tf2_ros.TransformListener(self.tf_buffer)
         
         self.client = actionlib.SimpleActionClient(move_base_node, MoveBaseAction)

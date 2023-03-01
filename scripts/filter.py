@@ -66,7 +66,7 @@ def node():
 
     rate = rospy.Rate(rateHz)
 
-    tf_buffer = tf2_ros.Buffer()
+    tf_buffer = tf2_ros.Buffer(rospy.Duration(10.0))
     tf_listener = tf2_ros.TransformListener(tf_buffer)
 
 

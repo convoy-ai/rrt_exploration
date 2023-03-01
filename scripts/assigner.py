@@ -100,7 +100,7 @@ def node():
 		for frontier in frontiers:
 			info_gain = fn.get_discounted_info_gain(world_map, frontier, visited_frontiers, info_radius)
 			
-			if info_gain > 0.01: # very close to 0 gain
+			if info_gain > 0.1: # very close to 0 gain
 				info_gains.append(info_gain)
 				filtered_frontiers.append(frontier)
 
