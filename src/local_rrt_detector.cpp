@@ -15,13 +15,16 @@
 #include "nav_msgs/MapMetaData.h"
 #include "geometry_msgs/Point.h"
 #include "visualization_msgs/Marker.h"
-#include <tf/transform_listener.h>
-
+#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
+#include "tf2/exceptions.h"
+#include "tf2_ros/transform_listener.h"
+#include "tf2_ros/buffer.h"
 
 
 // global variables
 nav_msgs::OccupancyGrid mapData;
-geometry_msgs::PointStamped clickedpoint; // seems not in use?
+geometry_msgs::PointStamped clicked_points[5]; 
+int clicked_point_index = 0;
 geometry_msgs::PointStamped exploration_goal;
 visualization_msgs::Marker points, line;
 float xdim, ydim, resolution, Xstartx, Xstarty, init_map_x, init_map_y;
@@ -32,18 +35,16 @@ rdm r; // for generating random numbers
 
 //Subscribers callback functions---------------------------------------
 void mapCallBack(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
-    mapData=*msg;
+    mapData = *msg;
 }
 
 
  
 void rvizCallBack(const geometry_msgs::PointStamped::ConstPtr& msg) {
-    geometry_msgs::Point p;
-    p.x=msg->point.x;
-    p.y=msg->point.y;
-    p.z=msg->point.z;
-
-    points.points.push_back(p);
+    if (clicked_point_index < 5) {
+        clicked_points[clicked_point_index] = *msg;
+        clicked_point_index++;
+    }
 }
 
 
@@ -64,7 +65,7 @@ int main(int argc, char **argv) {
     ros::NodeHandle nh;
   
     // fetching all parameters
-    float eta,init_map_x,init_map_y,range;
+    float eta;
     std::string map_topic, base_frame;
     int update_rate;
 
@@ -86,14 +87,15 @@ int main(int argc, char **argv) {
 
     ros::Rate rate(update_rate);
 
+
+    tf2_ros::Buffer tf_buffer(ros::Duration(10.0));
+    tf2_ros::TransformListener tf_listener(tf_buffer);
  
     // wait until map is received
     while (mapData.data.size() < 1)  {
         ros::spinOnce();
         ros::Duration(0.1).sleep();
     }
-
-
 
     // visualizations: points and lines
     points.header.frame_id=mapData.header.frame_id;
@@ -131,69 +133,88 @@ int main(int argc, char **argv) {
     points.lifetime = ros::Duration();
     line.lifetime = ros::Duration();
 
-    geometry_msgs::Point p;
 
-
-    while (points.points.size() < 5) {
+    while (clicked_point_index < 5) {
         ros::spinOnce();
+        ros::Duration(0.1).sleep();
     }
 
-    ROS_INFO("Local detector: begin building RRT");
+    geometry_msgs::PointStamped point1 = clicked_points[0];
+    geometry_msgs::PointStamped point2 = clicked_points[2];
+    geometry_msgs::PointStamped point1_out, point2_out;
+
+    std::string target_frame = mapData.header.frame_id;
+
+    tf_buffer.transform<geometry_msgs::PointStamped>(point1, point1_out, target_frame, ros::Duration(5.0));
+    tf_buffer.transform<geometry_msgs::PointStamped>(point2, point2_out, target_frame, ros::Duration(5.0));
+
 
     std::vector<float> temp1;
-    temp1.push_back(points.points[0].x);
-    temp1.push_back(points.points[0].y);
+    temp1.push_back(point1_out.point.x);
+    temp1.push_back(point1_out.point.y);
 	
     std::vector<float> temp2;
-    temp2.push_back(points.points[2].x);
-    temp2.push_back(points.points[0].y);
+    temp2.push_back(point2_out.point.x);
+    temp2.push_back(point1_out.point.y);
 
+    float region_width = Norm(temp1, temp2); // in direction of x
+    temp2.clear();
 
-    init_map_x = Norm(temp1, temp2);
+    temp2.push_back(point1_out.point.x);
+    temp2.push_back(point2_out.point.y);
+
+    float region_height = Norm(temp1, temp2); // in direction of y
+    
     temp1.clear();
     temp2.clear();
 
-    temp1.push_back(points.points[0].x);
-    temp1.push_back(points.points[0].y);
+    float center_x = (point1_out.point.x + point2_out.point.x) * .5;
+    float center_y = (point1_out.point.y + point2_out.point.y) * .5;
 
-    temp2.push_back(points.points[0].x);
-    temp2.push_back(points.points[2].y);
-
-    init_map_y=Norm(temp1, temp2);
-    temp1.clear();
-    temp2.clear();
-
-    Xstartx = (points.points[0].x + points.points[2].x) * .5;
-    Xstarty = (points.points[0].y + points.points[2].y) * .5;
-
-    geometry_msgs::Point trans;
-    trans = points.points[4];
 
     std::vector< std::vector<float>> V;
 
-    std::vector<float> x_origin;
-    x_origin.push_back(trans.x);
-    x_origin.push_back(trans.y);
+    // find initial robot position
+    int found_transform = 0;
+    geometry_msgs::TransformStamped transform_stamped;
 
-    V.push_back(x_origin);
+    while (found_transform==0) {
+        try {
+            found_transform = 1;
+            transform_stamped = tf_buffer.lookupTransform(mapData.header.frame_id, base_frame, ros::Time(0));
+        }
+        catch (tf2::ExtrapolationException &ex) {
+            ROS_WARN("%s", ex.what());
+            ros::Duration(0.5).sleep();
+        }
+    }
+
+    std::vector<float> init_point;
+    init_point.push_back(transform_stamped.transform.translation.x);
+    init_point.push_back(transform_stamped.transform.translation.y);
+
+    V.push_back(init_point);
+
 
     points.points.clear();
     rviz_pub.publish(points);
 
     std::vector<float> frontiers;
-    int i=0;
     float xr,yr;
     std::vector<float> x_rand, x_nearest, x_new;
+    geometry_msgs::Point p;
 
-    tf::TransformListener listener;
+    // ---------------------------------------------------
+    
+    ROS_INFO("Local detector: begin building RRT");
 
     // Main loop
     while (ros::ok()) {
 
         // Sample free
         x_rand.clear();
-        xr=(drand() * init_map_x) - (init_map_x * 0.5) + Xstartx;
-        yr=(drand() * init_map_y) - (init_map_y * 0.5) + Xstarty;
+        xr=(drand() * region_width) - (region_width * 0.5) + center_x;
+        yr=(drand() * region_height) - (region_height * 0.5) + center_y;
 
 
         x_rand.push_back( xr );
@@ -228,22 +249,21 @@ int main(int argc, char **argv) {
             V.clear();
 
 
-            tf::StampedTransform transform;
+            geometry_msgs::TransformStamped transform_stamped;
             int found_transform = 0;
             while (found_transform==0) {
                 try {
                     found_transform = 1;
-                    listener.lookupTransform(mapData.header.frame_id, base_frame, ros::Time(0), transform);
+                    transform_stamped = tf_buffer.lookupTransform(mapData.header.frame_id, base_frame, ros::Time(0));
                 }
-                catch (tf::TransformException ex) {
+                catch (tf2::ExtrapolationException &ex) {
                     ROS_WARN("%s", ex.what());
-                    found_transform = 0;
-                    ros::Duration(1).sleep();
+                    ros::Duration(0.5).sleep();
                 }
             }
 
-            x_new[0] = transform.getOrigin().x();
-            x_new[1] = transform.getOrigin().y();
+            x_new[0] = transform_stamped.transform.translation.x;
+            x_new[1] = transform_stamped.transform.translation.y;
             V.push_back(x_new);
             line.points.clear();
             ROS_DEBUG("Reset local RRT");
