@@ -36,6 +36,7 @@ def node():
 	info_multiplier=rospy.get_param('~info_multiplier',3.0)		
 	hysteresis_radius=rospy.get_param('~hysteresis_radius',3.0)			#at least as much as the laser scanner range
 	hysteresis_gain=rospy.get_param('~hysteresis_gain',2.0)				#bigger than 1 (biase robot to continue exploring current region
+	min_discounted_info_gain = rospy.get_param('~min_discounted_info_gain', 0.25)
 	frontiers_topic= rospy.get_param('~frontiers_topic','/filtered_points')	
 	robot_common_name = rospy.get_param('~common_name','')				# common name shared between robots, i.e. "robot_"
 	robot_count = rospy.get_param('~robot_count',1)
@@ -85,6 +86,8 @@ def node():
 	# list of visited frontiers, to be used to discount frontiers sent from the filter node
 	visited_frontiers = []
 
+	true_min_discounted_info_gain = min_discounted_info_gain * np.pi * (info_radius ** 2)
+
 
 #-------------------------------------------------------------------------
 #---------------------     Main   Loop     -------------------------------
@@ -100,7 +103,7 @@ def node():
 		for frontier in frontiers:
 			info_gain = fn.get_discounted_info_gain(world_map, frontier, visited_frontiers, info_radius)
 			
-			if info_gain > 0.1: # very close to 0 gain
+			if info_gain > true_min_discounted_info_gain: # very close to 0 gain
 				info_gains.append(info_gain)
 				filtered_frontiers.append(frontier)
 
