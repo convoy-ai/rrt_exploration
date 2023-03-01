@@ -102,7 +102,7 @@ int gridValue(nav_msgs::OccupancyGrid &mapData, std::vector<float> Xp) {
 
 
 // ObstacleFree function
-int ObstacleFree(std::vector<float> x_near, std::vector<float> &x_new, nav_msgs::OccupancyGrid map){
+int ObstacleFree(std::vector<float> x_near, std::vector<float> &x_new, nav_msgs::OccupancyGrid map, int obstacle_threshold){
     float rez = float(map.info.resolution) * 0.2;
     float stepz = int(ceil(Norm(x_new, x_near)) / rez);
     std::vector<float> x_i = x_near;
@@ -111,7 +111,7 @@ int ObstacleFree(std::vector<float> x_near, std::vector<float> &x_new, nav_msgs:
     for (int c=0; c < stepz; c++) {
         x_i = Steer(x_i, x_new, rez);
 
-        if (gridValue(map,x_i) == 100) {
+        if (gridValue(map,x_i) >= obstacle_threshold) {
             obs = 1;
         }
 

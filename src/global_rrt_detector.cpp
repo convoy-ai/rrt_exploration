@@ -68,12 +68,13 @@ int main(int argc, char **argv) {
     // fetching all parameters
     float eta, init_map_x, init_map_y, range;
     std::string map_topic, base_frame_topic;
-    int update_rate;
+    int obstacle_threshold, update_rate;
 
     std::string ns = ros::this_node::getName();
 
     nh.param<float>(ns + "/eta", eta, 0.5);
     nh.param<std::string>(ns + "/map_topic", map_topic, "/map");
+    nh.param<int>(ns + "/obstacle_threshold", obstacle_threshold, 70);
     nh.param<int>(ns + "/rate", update_rate, 100);
 
     //---------------------------------------------------------------
@@ -207,7 +208,7 @@ int main(int argc, char **argv) {
         x_new = Steer(x_nearest, x_rand, eta);
 
         // ObstacleFree    1:free     -1:unknown (frontier region)      0:obstacle
-        int checking = ObstacleFree(x_nearest, x_new, mapData);
+        int checking = ObstacleFree(x_nearest, x_new, mapData, obstacle_threshold);
 
         if (checking == -1) {
             // x_new is in unknown region, near the frontier boundary

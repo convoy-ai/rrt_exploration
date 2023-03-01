@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     // fetching all parameters
     float eta;
     std::string map_topic, base_frame;
-    int update_rate;
+    int obstacle_threshold, update_rate;
 
     std::string ns = ros::this_node::getName();
 
@@ -75,6 +75,7 @@ int main(int argc, char **argv) {
     ros::param::param<float>(ns + "/eta", eta, 0.5);
     ros::param::param<std::string>(ns + "/map_topic", map_topic, "map");
     ros::param::param<std::string>(ns + "/base_frame", base_frame, "base_link");
+    ros::param::param<int>(ns + "/obstacle_threshold", obstacle_threshold, 70);
     ros::param::param<int>(ns + "/rate", update_rate, 20);
 
 
@@ -88,7 +89,7 @@ int main(int argc, char **argv) {
     ros::Rate rate(update_rate);
 
 
-    tf2_ros::Buffer tf_buffer(ros::Duration(10.0));
+    tf2_ros::Buffer tf_buffer(ros::Duration(15.0));
     tf2_ros::TransformListener tf_listener(tf_buffer);
  
     // wait until map is received
@@ -229,7 +230,7 @@ int main(int argc, char **argv) {
 
 
         // ObstacleFree    1:free     -1:unknown (frontier region)      0:obstacle
-        int checking = ObstacleFree(x_nearest, x_new, mapData);
+        int checking = ObstacleFree(x_nearest, x_new, mapData, obstacle_threshold);
 
         if (checking == -1) {
             exploration_goal.header.stamp=ros::Time(0);

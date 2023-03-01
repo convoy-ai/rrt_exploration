@@ -34,5 +34,5 @@ std::vector<float> Steer(  std::vector<float>, std::vector<float>, float );
 int gridValue(nav_msgs::OccupancyGrid &,std::vector<float>);
 
 //ObstacleFree function prototype
-int ObstacleFree(std::vector<float> , std::vector<float> & , nav_msgs::OccupancyGrid);
+int ObstacleFree(std::vector<float> , std::vector<float> & , nav_msgs::OccupancyGrid, int obstacle_threshold);
 #endif
