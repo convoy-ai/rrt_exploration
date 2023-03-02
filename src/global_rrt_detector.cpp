@@ -15,13 +15,16 @@
 #include "nav_msgs/MapMetaData.h"
 #include "geometry_msgs/Point.h"
 #include "visualization_msgs/Marker.h"
-#include <tf/transform_listener.h>
-
+#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
+#include "tf2/exceptions.h"
+#include "tf2_ros/transform_listener.h"
+#include "tf2_ros/buffer.h"
 
 
 // global variables
 nav_msgs::OccupancyGrid mapData;
-geometry_msgs::PointStamped clickedpoint; // seems not in use?
+geometry_msgs::PointStamped clicked_points[5]; 
+int clicked_point_index = 0;
 geometry_msgs::PointStamped exploration_goal;
 visualization_msgs::Marker points, line;
 float xdim, ydim, resolution, Xstartx, Xstarty, init_map_x, init_map_y;
@@ -38,14 +41,19 @@ void mapCallBack(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
 
  
 void rvizCallBack(const geometry_msgs::PointStamped::ConstPtr& msg) {
-    geometry_msgs::Point p;
-    p.x= msg->point.x;
-    p.y= msg->point.y;
-    p.z= msg->point.z;
+    if (clicked_point_index < 5) {
+        clicked_points[clicked_point_index] = *msg;
+        clicked_point_index++;
+        
+        geometry_msgs::Point p;
+        p.x = msg->point.x;
+        p.y = msg->point.y;
+        p.z = msg->point.z;
 
-    points.points.push_back(p);
+        points.points.push_back(p);
 
-    ROS_INFO("Number of clicked points received: %ld", points.points.size());
+        ROS_INFO("Received clicked point: %d", clicked_point_index);
+    }
 }
 
 
@@ -62,30 +70,36 @@ int main(int argc, char **argv) {
 
     // generate the same numbers as in the original C test program
 
-    ros::init(argc, argv, "global_rrt_frontier_detector");
+    ros::init(argc, argv, "local_rrt_frontier_detector");
     ros::NodeHandle nh;
   
     // fetching all parameters
-    float eta, init_map_x, init_map_y, range;
-    std::string map_topic, base_frame_topic;
+    float eta;
+    std::string map_topic, base_frame;
     int obstacle_threshold, update_rate;
 
     std::string ns = ros::this_node::getName();
 
-    nh.param<float>(ns + "/eta", eta, 0.5);
-    nh.param<std::string>(ns + "/map_topic", map_topic, "/map");
-    nh.param<int>(ns + "/obstacle_threshold", obstacle_threshold, 70);
-    nh.param<int>(ns + "/rate", update_rate, 100);
+
+    ros::param::param<float>(ns + "/eta", eta, 0.5);
+    ros::param::param<std::string>(ns + "/map_topic", map_topic, "map");
+    ros::param::param<std::string>(ns + "/base_frame", base_frame, "base_link");
+    ros::param::param<int>(ns + "/obstacle_threshold", obstacle_threshold, 70);
+    ros::param::param<int>(ns + "/rate", update_rate, 20);
+
 
     //---------------------------------------------------------------
-    ros::Subscriber map_sub = nh.subscribe(map_topic, 100, mapCallBack);
-    ros::Subscriber rviz_sub = nh.subscribe("/clicked_point", 100, rvizCallBack);
+    ros::Subscriber map_sub= nh.subscribe(map_topic, 100, mapCallBack);
+    ros::Subscriber rviz_sub= nh.subscribe("/clicked_point", 100, rvizCallBack);
 
     ros::Publisher targets_pub = nh.advertise<geometry_msgs::PointStamped>("/detected_points", 10);
-    ros::Publisher rviz_pub = nh.advertise<visualization_msgs::Marker>(ns + "/shapes", 10);
+    ros::Publisher rviz_pub = nh.advertise<visualization_msgs::Marker>(ns+"/shapes", 10);
 
     ros::Rate rate(update_rate);
- 
+
+
+    tf2_ros::Buffer tf_buffer(ros::Duration(15.0));
+    tf2_ros::TransformListener tf_listener(tf_buffer);
  
     // wait until map is received
     while (mapData.data.size() < 1)  {
@@ -93,12 +107,11 @@ int main(int argc, char **argv) {
         ros::Duration(0.1).sleep();
     }
 
-
     // visualizations: points and lines
-    points.header.frame_id = mapData.header.frame_id;
-    line.header.frame_id = mapData.header.frame_id;
-    points.header.stamp = ros::Time(0);
-    line.header.stamp = ros::Time(0);
+    points.header.frame_id=mapData.header.frame_id;
+    line.header.frame_id=mapData.header.frame_id;
+    points.header.stamp=ros::Time(0);
+    line.header.stamp=ros::Time(0);
 	
     points.ns = line.ns = "markers";
     points.id = 0;
@@ -109,16 +122,16 @@ int main(int argc, char **argv) {
     line.type = line.LINE_LIST;
 
     // Set the marker action.  Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
-    points.action =points.ADD;
+    points.action = points.ADD;
     line.action = line.ADD;
     points.pose.orientation.w = 1.0;
     line.pose.orientation.w = 1.0;
-    line.scale.x = 0.01;
+    line.scale.x =  0.01;
     line.scale.y = 0.01;
     points.scale.x = 0.1;
     points.scale.y = 0.1;
 
-    // blue line, red points
+    // blue line, blue points
     line.color.r = 9.0/255.0;
     line.color.g = 91.0/255.0;
     line.color.b = 236.0/255.0;
@@ -130,120 +143,136 @@ int main(int argc, char **argv) {
     points.lifetime = ros::Duration();
     line.lifetime = ros::Duration();
 
-    geometry_msgs::Point p;
-
     ROS_INFO("Waiting for clicked points");
 
-    while (points.points.size() < 5) {
+    while (clicked_point_index < 5) {
         ros::spinOnce();
+        points.header.frame_id = "world";
         rviz_pub.publish(points);
     }
 
+    points.header.frame_id = mapData.header.frame_id;
+
     ROS_INFO("Global detector: begin building RRT");
 
+    geometry_msgs::PointStamped point1 = clicked_points[0];
+    geometry_msgs::PointStamped point2 = clicked_points[2];
+    geometry_msgs::PointStamped point1_out, point2_out;
+
+    std::string target_frame = mapData.header.frame_id;
+
+    tf_buffer.transform<geometry_msgs::PointStamped>(point1, point1_out, target_frame, ros::Duration(5.0));
+    tf_buffer.transform<geometry_msgs::PointStamped>(point2, point2_out, target_frame, ros::Duration(5.0));
+
+
     std::vector<float> temp1;
-    temp1.push_back(points.points[0].x);
-    temp1.push_back(points.points[0].y);
+    temp1.push_back(point1_out.point.x);
+    temp1.push_back(point1_out.point.y);
 	
     std::vector<float> temp2;
-    temp2.push_back(points.points[2].x);
-    temp2.push_back(points.points[0].y);
+    temp2.push_back(point2_out.point.x);
+    temp2.push_back(point1_out.point.y);
 
+    float region_width = Norm(temp1, temp2); // in direction of x
+    temp2.clear();
 
-    init_map_x = Norm(temp1, temp2);
+    temp2.push_back(point1_out.point.x);
+    temp2.push_back(point2_out.point.y);
+
+    float region_height = Norm(temp1, temp2); // in direction of y
+    
     temp1.clear();
     temp2.clear();
 
-    temp1.push_back(points.points[0].x);
-    temp1.push_back(points.points[0].y);
+    float center_x = (point1_out.point.x + point2_out.point.x) * .5;
+    float center_y = (point1_out.point.y + point2_out.point.y) * .5;
 
-    temp2.push_back(points.points[0].x);
-    temp2.push_back(points.points[2].y);
 
-    init_map_y = Norm(temp1, temp2);
-    temp1.clear();
-    temp2.clear();
+    std::vector< std::vector<float>> V;
 
-    // roughly center of region
-    Xstartx = (points.points[0].x + points.points[2].x) * .5;
-    Xstarty = (points.points[0].y + points.points[2].y) * .5;
+    // find initial robot position
+    int found_transform = 0;
+    geometry_msgs::TransformStamped transform_stamped;
 
-    geometry_msgs::Point trans;
-    trans = points.points[4];
+    while (found_transform==0) {
+        try {
+            found_transform = 1;
+            transform_stamped = tf_buffer.lookupTransform(mapData.header.frame_id, base_frame, ros::Time(0));
+        }
+        catch (tf2::ExtrapolationException &ex) {
+            ROS_WARN("%s", ex.what());
+            ros::Duration(0.5).sleep();
+        }
+    }
 
-    std::vector<std::vector<float>> V;
+    std::vector<float> init_point;
+    init_point.push_back(transform_stamped.transform.translation.x);
+    init_point.push_back(transform_stamped.transform.translation.y);
 
-    std::vector<float> x_origin;
-    x_origin.push_back(trans.x);
-    x_origin.push_back(trans.y);
+    V.push_back(init_point);
 
-    ROS_INFO("Origin: (%.2f, %.2f)", x_origin[0], x_origin[1]);
-
-    V.push_back(x_origin);
 
     points.points.clear();
     rviz_pub.publish(points);
 
     std::vector<float> frontiers;
-    int i = 0;
     float xr,yr;
     std::vector<float> x_rand, x_nearest, x_new;
+    geometry_msgs::Point p;
 
+    // ---------------------------------------------------
+    
+    ROS_INFO("Local detector: begin building RRT");
 
     // Main loop
     while (ros::ok()) {
 
         // Sample free
         x_rand.clear();
-        xr = (drand() * init_map_x) - (init_map_x * 0.5) + Xstartx;
-        yr = (drand() * init_map_y) - (init_map_y * 0.5) + Xstarty;
+        xr=(drand() * region_width) - (region_width * 0.5) + center_x;
+        yr=(drand() * region_height) - (region_height * 0.5) + center_y;
+
 
         x_rand.push_back( xr );
         x_rand.push_back( yr );
 
+
         // Nearest
-        x_nearest = Nearest(V, x_rand);
+        x_nearest=Nearest(V, x_rand);
 
         // Steer
-        x_new = Steer(x_nearest, x_rand, eta);
+        x_new=Steer(x_nearest, x_rand, eta);
+
 
         // ObstacleFree    1:free     -1:unknown (frontier region)      0:obstacle
         int checking = ObstacleFree(x_nearest, x_new, mapData, obstacle_threshold);
 
         if (checking == -1) {
-            // x_new is in unknown region, near the frontier boundary
-            // publish it as an exploration goal (detected point)
-            exploration_goal.header.stamp = ros::Time(0);
-            exploration_goal.header.frame_id = mapData.header.frame_id;
-
-            exploration_goal.point.x = x_new[0];
-            exploration_goal.point.y = x_new[1];
-            exploration_goal.point.z = 0.0;
-            p.x = x_new[0];
-            p.y = x_new[1];
-            p.z = 0.0;
+            exploration_goal.header.stamp=ros::Time(0);
+            exploration_goal.header.frame_id=mapData.header.frame_id;
+            exploration_goal.point.x=x_new[0];
+            exploration_goal.point.y=x_new[1];
+            exploration_goal.point.z=0.0;
+            p.x=x_new[0];
+            p.y=x_new[1];
+            p.z=0.0;
 
             points.points.push_back(p);
-
+            
             rviz_pub.publish(points);
             targets_pub.publish(exploration_goal);
 
             points.points.clear();
         } else if (checking == 1) {
-            // x_new is in free space
-            // add it to V as RRT expansion
             V.push_back(x_new);
 
-            p.x = x_new[0];
-            p.y = x_new[1];
-            p.z = 0.0;
-
+            p.x=x_new[0];
+            p.y=x_new[1];
+            p.z=0.0;
             line.points.push_back(p);
-
-            p.x = x_nearest[0];
-            p.y = x_nearest[1];
-            p.z = 0.0;
-
+            p.x=x_nearest[0];
+            p.y=x_nearest[1];
+            p.z=0.0;
             line.points.push_back(p);
         } else {
             // x_new is in obstacle region
@@ -254,6 +283,5 @@ int main(int argc, char **argv) {
         ros::spinOnce();
         rate.sleep();
     }
-
     return 0;
 }
