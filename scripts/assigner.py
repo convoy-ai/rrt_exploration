@@ -97,6 +97,7 @@ def node():
 #---------------------     Main   Loop     -------------------------------
 #-------------------------------------------------------------------------
 	while not rospy.is_shutdown():
+		
 
 #-------------------------------------------------------------------------			
 # get indices of available / busy robots
@@ -113,6 +114,13 @@ def node():
 
 				if visited_frontier is not None and (not robot.has_failed_previous_goal()):
 					visited_frontiers.append(visited_frontier)
+			
+			else:
+				info_gain = fn.get_information_gain(world_map, robot.assigned_point, info_radius)
+
+				if info_gain < true_min_discounted_info_gain * 0.2:
+					rospy.logwarn(f"Robot: {robot_namespace}, cancelling assigned frontier: {robot.assigned_point}, info_gain: {info_gain}")
+					robot.cancel_goal()
 			
 
 		rospy.loginfo(f"Available robots: {robots_idle}")
@@ -229,9 +237,6 @@ def node():
 			robot.send_goal(assigned_point)
 			current_assignment[robot_namespace] = assigned_point
 
-		if len(new_assignment.keys()) > 0:
-			rospy.sleep(delay_after_assignment)
-		
 
 #------------------------------------------------------------------------- 
 		

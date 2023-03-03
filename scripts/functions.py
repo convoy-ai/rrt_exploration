@@ -43,7 +43,7 @@ class Robot:
                 rospy.sleep(0.1)
         
         translation = trans.transform.translation
-        self.position = array([translation.x, translation.y])
+        self.position = [translation.x, translation.y]
         return self.position
 
 
@@ -71,12 +71,11 @@ class Robot:
         goal.target_pose.pose.orientation.w = 1.0
 
         self.client.send_goal(goal)
-        self.assigned_point = array(point)
+        self.assigned_point = point
 
 
     def cancel_goal(self):
         self.client.cancel_goal()
-        self.assigned_point = self.get_position()
 
 
     def get_state(self):
@@ -90,7 +89,7 @@ class Robot:
 
     def has_failed_previous_goal(self):
         failed_state = self.client.get_state() in [4,5]
-        distance = np.linalg.norm(self.get_position(), self.assigned_point)
+        distance = norm(np.array(self.get_position()) - np.array(self.assigned_point))
         return failed_state and distance > 1.0
 
 
