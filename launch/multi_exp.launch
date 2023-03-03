@@ -28,7 +28,7 @@
     <node pkg="rrt_exploration" type="global_rrt_detector" name="global_detector" output="log">
       <param name="eta" value="$(arg Geta)"/>
       <param name="map_topic" value="map"/>
-      <param name="base_frame" value="robot_1/base_link" />
+      <param name="base_frame" value="robot_2/base_link" />
       <param name="rate" value="10" />
     </node>
 
