@@ -86,6 +86,12 @@ class Robot:
     def is_idle(self):
         return self.client.get_state() in [2,3,4,5,8,9] 
         # see http://docs.ros.org/en/api/actionlib_msgs/html/msg/GoalStatus.html
+    
+
+    def has_failed_previous_goal(self):
+        failed_state = self.client.get_state() in [4,5]
+        distance = np.linalg.norm(self.get_position(), self.assigned_point)
+        return failed_state and distance > 1.0
 
 
 # ________________________________________________________________________________

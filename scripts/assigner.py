@@ -84,6 +84,9 @@ def node():
 		rospy.sleep(1)	
 	
 
+	# dict of frontiers assigned to the robots in the previous loop
+	current_assignment = {}
+
 	# list of visited frontiers, to be used to discount frontiers sent from the filter node
 	visited_frontiers = []
 
@@ -95,14 +98,41 @@ def node():
 #-------------------------------------------------------------------------
 	while not rospy.is_shutdown():
 
+#-------------------------------------------------------------------------			
+# get indices of available / busy robots
+# update visited frontiers list, and current assignment
+
+		robots_idle = [] # namespaces of robots that are idle, and ready to accept new assignments
+
+		for robot_namespace in robot_namespaces:
+			robot = robots[robot_namespace]
+
+			if robot.is_idle():
+				robots_idle.append(robot_namespace)
+				visited_frontier = current_assignment.pop(robot_namespace, None)
+
+				if visited_frontier is not None and (not robot.has_failed_previous_goal()):
+					visited_frontiers.append(visited_frontier)
+			
+
+		rospy.loginfo(f"Available robots: {robots_idle}")
+
+		if len(robots_idle) == 0:
+			rospy.loginfo(f"No available robots")
+			rate.sleep()
+			continue
+		
+
 #------------------------------------------------------------------------- 
 # get dicounted information gain for each frontier
+
+		targeted_frontiers = visited_frontiers + list(current_assignment.values())
 
 		filtered_frontiers = []
 		info_gains = []
 
 		for frontier in frontiers:
-			info_gain = fn.get_discounted_info_gain(world_map, frontier, visited_frontiers, info_radius)
+			info_gain = fn.get_discounted_info_gain(world_map, frontier, targeted_frontiers, info_radius)
 			
 			if info_gain > true_min_discounted_info_gain: # very close to 0 gain
 				info_gains.append(info_gain)
@@ -112,24 +142,6 @@ def node():
 
 		if len(filtered_frontiers) < 1:
 			rospy.loginfo("No filtered frontiers, nothing to assign to robots")
-			rate.sleep()
-			continue
-
-
-#-------------------------------------------------------------------------			
-# get indices of available / busy robots
-
-		robots_idle = [] # namespaces of robots that are idle, and ready to accept new assignments
-
-		robots_idle = [
-			robot_namespace for robot_namespace in robot_namespaces
-			if robots[robot_namespace].is_idle()
-		]
-
-		rospy.loginfo(f"Available robots: {robots_idle}")
-
-		if len(robots_idle) == 0:
-			rospy.loginfo(f"No available robots")
 			rate.sleep()
 			continue
 
@@ -174,6 +186,8 @@ def node():
 
 			rospy.loginfo("----------------------------")
 
+#--------------------------------------------------------------------------------------------
+# give the best frontier available to each idle robot
 
 		new_assignment = {} # dict with key = robot namespace, value = new assigned point
 
@@ -194,8 +208,6 @@ def node():
 			row_index = math.floor(best_revenue_index / column_count)
 			col_index = best_revenue_index % column_count
 
-			rospy.loginfo(f"best_revenue_index: {best_revenue_index}; row_index: {row_index}, col_index: {col_index}")
-
 			robot_index, frontier_index = robot_frontier_indices[row_index, col_index]
 			new_assignment[robots_idle[robot_index]] = filtered_frontiers[frontier_index]
 
@@ -203,9 +215,6 @@ def node():
 			revenue_2d = np.delete(revenue_2d, col_index, 1)
 			robot_frontier_indices = np.delete(robot_frontier_indices, row_index, 0)
 			robot_frontier_indices = np.delete(robot_frontier_indices, col_index, 1)
-
-			rospy.loginfo(f"revenue_2d: {revenue_2d}; robot_frontier_indices: {robot_frontier_indices}")
-			rospy.loginfo(f"size: {revenue_2d.size}")
 
 
 		rospy.loginfo(f"new_assignment: {new_assignment}")
@@ -218,7 +227,7 @@ def node():
 			robot = robots[robot_namespace]
 			
 			robot.send_goal(assigned_point)
-			visited_frontiers.append(assigned_point)
+			current_assignment[robot_namespace] = assigned_point
 
 		if len(new_assignment.keys()) > 0:
 			rospy.sleep(delay_after_assignment)
