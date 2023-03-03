@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
 
     // generate the same numbers as in the original C test program
 
-    ros::init(argc, argv, "local_rrt_frontier_detector");
+    ros::init(argc, argv, "global_rrt_frontier_detector");
     ros::NodeHandle nh;
   
     // fetching all parameters
@@ -222,7 +222,7 @@ int main(int argc, char **argv) {
 
     // ---------------------------------------------------
     
-    ROS_INFO("Local detector: begin building RRT");
+    ROS_INFO("Global detector: begin building RRT");
 
     // Main loop
     while (ros::ok()) {
