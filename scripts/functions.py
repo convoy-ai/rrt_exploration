@@ -207,3 +207,25 @@ def get_grid_value(mapData, Xp):
     data_2d = map_to_2d(mapData)
 
     return data_2d[index[1]][index[0]]
+
+def compute_revenue_list(map_data, frontiers, visited_frontiers, robot_position, info_radius, hysteresis_radius, hysteresis_gain, info_multiplier):
+    revenue_list = []
+
+    for frontier_index, frontier in enumerate(frontiers):
+        info_gain = get_discounted_info_gain(map_data, frontier, visited_frontiers, info_radius)
+        cost = np.linalg.norm(np.array(robot_position) - np.array(frontier))
+
+        if cost > hysteresis_radius:
+            h = 1
+        else:
+            h = hysteresis_gain
+        
+        total_gain = info_multiplier * h * info_gain
+        
+        revenue = total_gain - cost
+
+        rospy.loginfo(f"frontier: {frontier}; info_gain: {info_gain:.2f}; total_gain: {total_gain:.2f}; revenue: {revenue:.2f}")
+
+        revenue_list.append(revenue)
+
+    return revenue_list

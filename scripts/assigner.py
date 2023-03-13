@@ -156,73 +156,50 @@ def node():
 
 #-------------------------------------------------------------------------            
 # for each idle robot, compute revenue
+# assign frontier with highest revenue to robot
+# re-compute revenue for remaining idle robots
+# repeat until either no frontier or robot left to assign
 
 
 		revenue_2d = None
-
-		for robot_namespace in robots_idle:
-			robot = robots[robot_namespace]
-			position = robot.get_position()
-			
-			revenue_list = []
-
-			rospy.loginfo("----------------------------")
-			rospy.loginfo(f"robot: {robot_namespace}")
-
-			for frontier_index, frontier in enumerate(filtered_frontiers):
-				info_gain = info_gains[frontier_index]
-				cost = np.linalg.norm(position - frontier)
-
-				if cost > hysteresis_radius:
-					h = 1
-				else:
-					h = hysteresis_gain
-				
-				total_gain = info_multiplier * h * info_gain
-				
-				revenue = total_gain - cost
-
-				rospy.loginfo(f"frontier: {frontier}; info_gain: {info_gain:.2f}; total_gain: {total_gain:.2f}; revenue: {revenue:.2f}")
-
-				revenue_list.append(revenue)
-			
-			# revenue_dict[robot_namespace] = revenue_list
-			if revenue_2d is None:
-				revenue_2d = np.array([revenue_list])
-			else:
-				revenue_2d = np.vstack((revenue_2d, np.array(revenue_list)))
-
-			rospy.loginfo("----------------------------")
-
-#--------------------------------------------------------------------------------------------
-# give the best frontier available to each idle robot
-
 		new_assignment = {} # dict with key = robot namespace, value = new assigned point
 
 
-		robot_frontier_indices = []
+		while len(robots_idle) > 0 and len(filtered_frontiers) > 0:
 
-		for i in range(revenue_2d.shape[0]):
-			for j in range(revenue_2d.shape[1]):
-				robot_frontier_indices.append([i, j])
-		
-		robot_frontier_indices = np.resize(np.array(robot_frontier_indices), (revenue_2d.shape[0], revenue_2d.shape[1], 2))
-		rospy.loginfo(f"revenue_2d: {revenue_2d}")
-		
-		while revenue_2d.size != 0:
-		
+			# compute revenue for remaining idle robots
+
+			for robot_namespace in robots_idle:
+				robot = robots[robot_namespace]
+				robot_position = robot.get_position()
+			
+				rospy.loginfo("----------------------------")
+				rospy.loginfo(f"robot: {robot_namespace}")
+
+				revenue_list = fn.compute_revenue_list(world_map, filtered_frontiers, targeted_frontiers, robot_position, info_radius, hysteresis_radius, hysteresis_gain, info_multiplier)
+
+				if revenue_2d is None:
+					revenue_2d = np.array([revenue_list])
+				else:
+					revenue_2d = np.vstack((revenue_2d, np.array(revenue_list)))
+
+				rospy.loginfo("----------------------------")
+
+			# give best frontier to robot
+
 			best_revenue_index = np.argmax(revenue_2d)
 			row_count, column_count = revenue_2d.shape
-			row_index = math.floor(best_revenue_index / column_count)
-			col_index = best_revenue_index % column_count
+			robot_index = math.floor(best_revenue_index / column_count)
+			frontier_index = best_revenue_index % column_count
 
-			robot_index, frontier_index = robot_frontier_indices[row_index, col_index]
-			new_assignment[robots_idle[robot_index]] = filtered_frontiers[frontier_index]
+			best_robot = robots_idle.pop(robot_index)
+			best_frontier = filtered_frontiers.pop(frontier_index)
 
-			revenue_2d = np.delete(revenue_2d, row_index, 0)
-			revenue_2d = np.delete(revenue_2d, col_index, 1)
-			robot_frontier_indices = np.delete(robot_frontier_indices, row_index, 0)
-			robot_frontier_indices = np.delete(robot_frontier_indices, col_index, 1)
+			new_assignment[best_robot] = best_frontier
+
+			revenue_2d = None
+
+			targeted_frontiers.append(best_frontier)
 
 
 		rospy.loginfo(f"new_assignment: {new_assignment}")
