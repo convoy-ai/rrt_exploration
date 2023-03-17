@@ -38,7 +38,7 @@ def node():
 	hysteresis_radius=rospy.get_param('~hysteresis_radius',3.0)			#at least as much as the laser scanner range
 	hysteresis_gain=rospy.get_param('~hysteresis_gain',2.0)				#bigger than 1 (biase robot to continue exploring current region
 	min_discounted_info_gain = rospy.get_param('~min_discounted_info_gain', 0.25)
-	current_assignment_stickiness = rospy.get_param('~current_assignment_stickiness', 0.5) # minimum difference of information gain between current assignment and other frontiers
+	current_assignment_stickiness = rospy.get_param('~current_assignment_stickiness', 0.5) # minimum difference of revenue between current assignment and other available frontiers
 	frontiers_topic= rospy.get_param('~frontiers_topic','/filtered_points')	
 	robot_common_name = rospy.get_param('~common_name','')				# common name shared between robots, i.e. "robot_"
 	robot_count = rospy.get_param('~robot_count',1)
@@ -107,6 +107,7 @@ def node():
 
 		for robot_namespace in robot_namespaces:
 			robot = robots[robot_namespace]
+			robot_position = robot.get_position()
 
 			if robot.is_idle():
 				robots_idle.append(robot_namespace)
@@ -116,19 +117,17 @@ def node():
 					visited_frontiers.append(frontier)
 			
 			else:
-				current_info_gain = fn.get_information_gain(world_map, robot.assigned_point, info_radius)
-				alternative_frontier_info_gain = -1 * np.inf
+				current_info_gain = fn.get_discounted_information_gain(world_map, robot.assigned_point, visited_frontiers, info_radius)
+				current_revenue = fn.compute_revenue_list(world_map, [robot.assigned_point], visited_frontiers, robot_position, info_radius, hysteresis_radius, hysteresis_gain, info_multiplier)
+				alternative_frontier_revenue = -1 * np.inf
 
 				if len(frontiers) > 0:
 					targeted_frontiers = visited_frontiers + list(current_assignment.values())
-					other_info_gains = [
-						fn.get_discounted_info_gain(world_map, frontier, targeted_frontiers, info_radius)
-						for frontier in frontiers
-					]
-					alternative_frontier_info_gain = np.max(other_info_gains)
+					revenue_list = fn.compute_revenue_list(world_map, frontiers, targeted_frontiers, robot_position, info_radius, hysteresis_radius, hysteresis_gain, info_multiplier)
+					alternative_frontier_revenue = np.max(revenue_list)
 
-				if current_info_gain < true_min_discounted_info_gain * 0.2 or alternative_frontier_info_gain > current_info_gain + current_assignment_stickiness:
-					rospy.logwarn(f"Robot: {robot_namespace}, cancelling assigned frontier: {robot.assigned_point}, info_gain: {current_info_gain}, alternative_frontier_info_gain: {alternative_frontier_info_gain}")
+				if current_info_gain < true_min_discounted_info_gain * 0.2 or alternative_frontier_revenue > current_revenue + current_assignment_stickiness:
+					rospy.logwarn(f"Robot: {robot_namespace}, cancelling assigned frontier: {robot.assigned_point}, info_gain: {current_info_gain}, alternative_frontier_revenue: {alternative_frontier_revenue}")
 					robot.cancel_goal()
 			
 
