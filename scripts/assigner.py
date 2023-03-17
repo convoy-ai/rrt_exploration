@@ -117,7 +117,7 @@ def node():
 					visited_frontiers.append(frontier)
 			
 			else:
-				current_info_gain = fn.get_discounted_information_gain(world_map, robot.assigned_point, visited_frontiers, info_radius)
+				current_info_gain = fn.get_discounted_info_gain(world_map, robot.assigned_point, visited_frontiers, info_radius)
 				current_revenue = fn.compute_revenue_list(world_map, [robot.assigned_point], visited_frontiers, robot_position, info_radius, hysteresis_radius, hysteresis_gain, info_multiplier)
 				alternative_frontier_revenue = -1 * np.inf
 
