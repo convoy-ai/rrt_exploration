@@ -129,6 +129,9 @@ def node():
 				if (current_info_gain < true_min_discounted_info_gain * 0.2) or (alternative_frontier_revenue > current_revenue + current_assignment_stickiness):
 					rospy.logwarn(f"Robot: {robot_namespace}, cancelling assigned frontier: {robot.assigned_point}, info_gain: {current_info_gain}, revenue: {current_revenue}, alternative_frontier_revenue: {alternative_frontier_revenue}")
 					robot.cancel_goal()
+					if robot_namespace in current_assignment:
+						current_assignment.pop(robot_namespace)
+					robots_idle.append(robot_namespace)
 			
 
 		rospy.loginfo(f"Available robots: {robots_idle}")
@@ -185,6 +188,7 @@ def node():
 				rospy.loginfo(f"robot: {robot_namespace}")
 
 				revenue_list = fn.compute_revenue_list(world_map, filtered_frontiers, targeted_frontiers, robot_position, info_radius, hysteresis_radius, hysteresis_gain, info_multiplier)
+				rospy.loginfo(f"revenue: {list(zip(filtered_frontiers, revenue_list))}")
 
 				if revenue_2d is None:
 					revenue_2d = np.array([revenue_list])

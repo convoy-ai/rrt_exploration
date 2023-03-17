@@ -224,7 +224,7 @@ def compute_revenue_list(map_data, frontiers, visited_frontiers, robot_position,
         
         revenue = total_gain - cost
 
-        rospy.loginfo(f"frontier: {frontier}; info_gain: {info_gain:.2f}; total_gain: {total_gain:.2f}; revenue: {revenue:.2f}")
+        rospy.logdebug(f"frontier: {frontier}; info_gain: {info_gain:.2f}; total_gain: {total_gain:.2f}; revenue: {revenue:.2f}")
 
         revenue_list.append(revenue)
 
