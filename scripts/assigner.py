@@ -127,7 +127,7 @@ def node():
 					alternative_frontier_revenue = np.max(revenue_list)
 
 				if (current_info_gain < true_min_discounted_info_gain * 0.2) or (alternative_frontier_revenue > current_revenue + current_assignment_stickiness):
-					rospy.logwarn(f"Robot: {robot_namespace}, cancelling assigned frontier: {robot.assigned_point}, info_gain: {current_info_gain}, alternative_frontier_revenue: {alternative_frontier_revenue}")
+					rospy.logwarn(f"Robot: {robot_namespace}, cancelling assigned frontier: {robot.assigned_point}, info_gain: {current_info_gain}, revenue: {current_revenue}, alternative_frontier_revenue: {alternative_frontier_revenue}")
 					robot.cancel_goal()
 			
 
