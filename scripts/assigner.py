@@ -118,7 +118,7 @@ def node():
 			
 			else:
 				current_info_gain = fn.get_discounted_info_gain(world_map, robot.assigned_point, visited_frontiers, info_radius)
-				current_revenue = fn.compute_revenue_list(world_map, [robot.assigned_point], visited_frontiers, robot_position, info_radius, hysteresis_radius, hysteresis_gain, info_multiplier)
+				current_revenue = fn.compute_revenue_list(world_map, [robot.assigned_point], visited_frontiers, robot_position, info_radius, hysteresis_radius, hysteresis_gain, info_multiplier)[0]
 				alternative_frontier_revenue = -1 * np.inf
 
 				if len(frontiers) > 0:
@@ -126,7 +126,7 @@ def node():
 					revenue_list = fn.compute_revenue_list(world_map, frontiers, targeted_frontiers, robot_position, info_radius, hysteresis_radius, hysteresis_gain, info_multiplier)
 					alternative_frontier_revenue = np.max(revenue_list)
 
-				if current_info_gain < true_min_discounted_info_gain * 0.2 or alternative_frontier_revenue > current_revenue + current_assignment_stickiness:
+				if (current_info_gain < true_min_discounted_info_gain * 0.2) or (alternative_frontier_revenue > current_revenue + current_assignment_stickiness):
 					rospy.logwarn(f"Robot: {robot_namespace}, cancelling assigned frontier: {robot.assigned_point}, info_gain: {current_info_gain}, alternative_frontier_revenue: {alternative_frontier_revenue}")
 					robot.cancel_goal()
 			
