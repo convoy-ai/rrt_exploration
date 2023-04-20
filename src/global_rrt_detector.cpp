@@ -147,13 +147,13 @@ int main(int argc, char **argv) {
 
     while (clicked_point_index < 5) {
         ros::spinOnce();
-        points.header.frame_id = "world";
+        points.header.frame_id = clicked_points[0].header.frame_id;
         rviz_pub.publish(points);
     }
 
     points.header.frame_id = mapData.header.frame_id;
 
-    ROS_INFO("Global detector: begin building RRT");
+    ROS_INFO("Global detector: transforming clicked points to robot map");
 
     geometry_msgs::PointStamped point1 = clicked_points[0];
     geometry_msgs::PointStamped point2 = clicked_points[2];
