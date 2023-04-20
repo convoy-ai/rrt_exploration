@@ -61,7 +61,6 @@
     <param name="frontiers_topic" value="/filtered_points"/> 
     <param name="common_name" value="robot_"/>
     <param name="robot_count" value="2"/>
-    <param name="delay_after_assignment" value="0.5"/>
     <param name="rate" value="0.5"/>
   </node>
   
